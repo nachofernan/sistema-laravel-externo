@@ -5,3 +5,76 @@
 [x-cloak] {
     display: none;
 }
+
+@layer components {
+    .input-full {
+        @apply px-4 py-2 border focus:ring-gray-500 focus:border-gray-900 w-full sm:text-sm border-gray-300 rounded-md focus:outline-none text-gray-600
+    }
+
+    .boton-celeste {
+        @apply rounded bg-blue-200 py-2 px-4 hover:bg-blue-300
+    }
+
+    .link-azul {
+        @apply text-blue-600 hover:underline
+    }
+
+    /**
+    Para los Index
+    */
+    .titulo-index {
+        @apply text-2xl mb-2 pl-3 pt-1
+    }
+
+    .table-index {
+        @apply items-center bg-transparent w-full border-collapse bg-white shadow-lg rounded
+    }
+
+    .th-index {
+        @apply px-6 align-middle py-3 text-xs uppercase font-semibold text-left border-b
+    }
+
+    .td-index {
+        @apply border-t-0 px-6 align-middle text-xs py-2
+    }
+
+    /**
+    Para los Show
+    */
+
+    .cabecera-show {
+        @apply px-5 py-3 border-b pb-3
+    }
+
+    .titulo-show {
+        @apply text-xl font-bold
+    }
+
+    .subtitulo-show {
+        @apply text-lg border-b pb-2 mb-2
+    }
+
+    .grid-datos-show {
+        @apply grid grid-cols-6 gap-4 text-sm
+    }
+
+    .atributo-show {
+        @apply col-span-2 text-right
+    }
+
+    .valor-show {
+        @apply col-span-4 font-bold
+    }
+
+    /**
+    Para los Edit
+    */
+
+    .atributo-edit {
+        @apply col-span-2 text-right mt-2
+    }
+
+    .valor-edit {
+        @apply col-span-4
+    }
+}

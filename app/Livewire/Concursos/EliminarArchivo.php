@@ -1,0 +1,129 @@
+<?php
+
+namespace App\Livewire\Concursos;
+
+use Livewire\Component;
+
+class EliminarArchivo extends Component
+{
+    public $open = false;
+    public $documento;
+    public $concurso; // ✅ Agregar estas propiedades
+    public $invitacion; // ✅ Agregar estas propiedades
+    public $puede_eliminar;
+
+    public function mount($documento, $concurso = null, $invitacion = null) {
+        $this->documento = $documento;
+        $this->concurso = $concurso; // ✅ Recibir concurso por separado
+        $this->invitacion = $invitacion; // ✅ Recibir invitación por separado
+        $this->puede_eliminar = $this->puedeEliminar();
+    }
+
+    private function puedeEliminar() {
+        // ✅ Verificar si los datos vienen de API o BD
+        if (is_object($this->documento) && !method_exists($this->documento, 'invitacion')) {
+            // Los datos vienen de API - usar propiedades directas
+            return $this->puedeEliminarFromApi();
+        } else {
+            // Los datos vienen de BD - usar métodos de modelo (compatibilidad)
+            return $this->puedeEliminarFromModel();
+        }
+    }
+
+    /**
+     * ✅ Verificación para datos que vienen de API
+     */
+    private function puedeEliminarFromApi()
+    {
+        // Si no tiene documento_tipo_id, se puede eliminar (documento libre)
+        if (!isset($this->documento->documento_tipo_id) || !$this->documento->documento_tipo_id) {
+            return true;
+        }
+
+        // ✅ Buscar el documento tipo en los datos de API
+        $documento_tipo = $this->findDocumentoTipoFromApi($this->documento->documento_tipo_id);
+        
+        if (!$documento_tipo || !$documento_tipo->obligatorio) {
+            return true; // No es obligatorio, se puede eliminar
+        }
+
+        // ✅ Contar documentos del mismo tipo en la invitación
+        $cantidad_docs = $this->countDocumentosSameTipoFromApi();
+        
+        // Si solo hay 1 documento de este tipo obligatorio, no se puede eliminar
+        return $cantidad_docs > 1;
+    }
+
+    /**
+     * ✅ Verificación para datos que vienen de BD (compatibilidad)
+     */
+    private function puedeEliminarFromModel()
+    {
+        // Si tiene documento_tipo_id y es obligatorio
+        if ($this->documento->documento_tipo_id) {
+            $documento_tipo = \App\Models\Concursos\DocumentoTipo::find($this->documento->documento_tipo_id);
+            
+            if ($documento_tipo && $documento_tipo->obligatorio) {
+                // Contar cuántos documentos de este tipo tiene la invitación
+                $cantidad_docs = $this->documento->invitacion
+                    ->documentos_con_tipo_id($this->documento->documento_tipo_id)
+                    ->count();
+                
+                // Si solo hay 1 documento de este tipo obligatorio, no se puede eliminar
+                return $cantidad_docs > 1;
+            }
+        }
+        
+        return true; // Se puede eliminar si no es obligatorio o hay más de uno
+    }
+
+    /**
+     * ✅ Buscar documento tipo desde datos de API usando $this->concurso
+     */
+    private function findDocumentoTipoFromApi($documentoTipoId)
+    {
+        // ✅ Usar $this->concurso en lugar de $this->documento->concurso
+        if ($this->concurso && isset($this->concurso->documentos_requeridos)) {
+            foreach ($this->concurso->documentos_requeridos as $doc_tipo) {
+                if ($doc_tipo->id == $documentoTipoId) {
+                    return $doc_tipo;
+                }
+            }
+        }
+
+        // ✅ Usar $this->invitacion en lugar de $this->documento->invitacion
+        if ($this->invitacion && isset($this->invitacion->documentos)) {
+            foreach ($this->invitacion->documentos as $doc) {
+                if ($doc->documento_tipo_id == $documentoTipoId && isset($doc->documento_tipo)) {
+                    return $doc->documento_tipo;
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * ✅ Contar documentos del mismo tipo usando $this->invitacion
+     */
+    private function countDocumentosSameTipoFromApi()
+    {
+        if (!$this->invitacion || !isset($this->invitacion->documentos)) {
+            return 0;
+        }
+
+        $count = 0;
+        foreach ($this->invitacion->documentos as $doc) {
+            if ($doc->documento_tipo_id == $this->documento->documento_tipo_id) {
+                $count++;
+            }
+        }
+        
+        return $count;
+    }
+    
+    public function render()
+    {
+        return view('livewire.concursos.eliminar-archivo');
+    }
+}

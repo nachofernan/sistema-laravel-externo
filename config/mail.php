@@ -37,6 +37,18 @@ return [
 
     'mailers' => [
 
+        'microsoft-graph' => [
+            'transport' => 'microsoft-graph',
+            'client_id' => env('MAIL_MICROSOFT_GRAPH_CLIENT_ID'),
+            'client_secret' => env('MAIL_MICROSOFT_GRAPH_CLIENT_SECRET'),
+            'tenant_id' => env('MAIL_MICROSOFT_GRAPH_TENANT_ID'),
+            'from' => [
+                'address' => env('MAIL_MICROSOFT_GRAPH_FROM'),
+                'name' => 'No responder',
+            ],
+            'save_to_sent_items' =>  env('MAIL_SAVE_TO_SENT_ITEMS', false),
+        ],
+
         'smtp' => [
             'transport' => 'smtp',
             'url' => env('MAIL_URL'),
