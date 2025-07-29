@@ -2,77 +2,62 @@
 
 namespace App\Livewire;
 
-use App\Http\Controllers\AuthController;
+use App\Services\ProveedorApiService;
+use Livewire\WithFileUploads;
+use Illuminate\Validation\Rule;
 use Livewire\Component;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
 
 class SubirArchivoGeneral extends Component
 {
+    use WithFileUploads;
+
     public $open = false;
     public $proveedor_id;
     public $documento_tipo_id;
     public $documentos = [];
     public $vencimiento;
+    public $file;
+    public $tipos_documentos = [];
+    public $successMessage = null;
+    public $errorMessage = null;
 
-    public function mount($proveedor_id) 
+    public function mount($proveedor_id)
     {
         $this->proveedor_id = $proveedor_id;
         $this->loadDocumentTypes();
     }
 
-    /**
-     * ✅ Crear instancia fresca del AuthController en cada uso
-     */
-    private function getAuthController()
-    {
-        return new AuthController();
-    }
-
-    /**
-     * Cargar tipos de documentos desde API
-     */
     public function loadDocumentTypes()
     {
-        try {
-            $token = $this->getAuthController()->getNewToken();
-            
-            $response = Http::timeout(10)
-                ->withToken($token)
-                ->get($this->getApiUrl() . '/documento-tipos');
+        $api = new ProveedorApiService();
+        $tipos = $api->getTiposDocumentos();
+        $this->tipos_documentos = $tipos['tipos_documentos'] ?? [];
+    }
 
-            if ($response->successful()) {
-                $data = $response->json();
-                $this->documentos = $data['documento_tipos'];
-            } else {
-                Log::error('Error loading document types', [
-                    'user_id' => Auth::id(),
-                    'status' => $response->status()
-                ]);
-                $this->documentos = [];
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Error in loadDocumentTypes', [
-                'user_id' => Auth::id(),
-                'error' => $e->getMessage()
-            ]);
-            $this->documentos = [];
+    public function submit()
+    {
+        $this->validate([
+            'file' => 'required|file|mimes:pdf|max:5120',
+            'documento_tipo_id' => ['required', Rule::in(collect($this->tipos_documentos)->pluck('id')->toArray())],
+            'vencimiento' => 'nullable|date',
+        ]);
+        $api = new ProveedorApiService();
+        $result = $api->subirDocumento($this->file, (int)$this->documento_tipo_id, $this->vencimiento);
+        if ($result) {
+            $this->successMessage = 'Documento subido correctamente. Pendiente de validación.';
+            $this->reset(['file', 'documento_tipo_id', 'vencimiento', 'open']);
+            $this->dispatch('documento-subido');
+        } else {
+            $this->errorMessage = 'Error al subir el documento. Intente nuevamente.';
         }
     }
 
     public function render()
     {
-        return view('livewire.subir-archivo-general');
-    }
-
-    /**
-     * ✅ Método centralizado para URL de API
-     */
-    private function getApiUrl(): string
-    {
-        $url = env('PLATAFORMA_API_URL');
-        return rtrim($url, '/');
+        return view('livewire.subir-archivo-general', [
+            'tipos_documentos' => $this->tipos_documentos,
+            'successMessage' => $this->successMessage,
+            'errorMessage' => $this->errorMessage,
+        ]);
     }
 }

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
@@ -322,6 +323,15 @@ class ProgressiveLogin extends Component
         Auth::login($user, true);
         $this->logAttempt('login', 'success');
         $this->clearAttempts();
+
+        // GUARDAR EL TOKEN JWT EN LA SESIÓN
+        try {
+            $token = app(\App\Http\Controllers\AuthController::class)->getNewToken();
+            session(['jwt_token' => $token]);
+            Log::info('JWT token guardado en sesión (Livewire)', ['user_id' => $user->id, 'token' => $token]);
+        } catch (\Exception $e) {
+            Log::error('No se pudo obtener el token JWT (Livewire)', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+        }
 
         $this->showMessage('success', '¡Bienvenido! Redirigiendo...');
         $this->dispatch('redirect-to', route('dashboard'));

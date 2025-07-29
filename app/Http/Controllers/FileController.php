@@ -73,49 +73,6 @@ class FileController extends Controller
         }
     }
 
-    public function uploadDocumentacionGeneral(Request $request)
-    {
-        $this->validateUploadFile($request, ['documento_tipo_id' => 'required']);
-
-        try {
-            $token = $this->authController->getNewToken();
-            $file = $request->file('file');
-            $sanitizedName = $this->sanitizeFileName($file->getClientOriginalName());
-            
-            if (!$this->isValidPdfFile($file)) {
-                return back()->with('error', 'El archivo no parece ser un PDF válido.');
-            }
-
-            $response = Http::timeout(30)
-                ->withToken($token)
-                ->attach('file', file_get_contents($file->getPathname()), $sanitizedName)
-                ->post($this->getApiUrl() . '/uploadDocumentacionGeneral', [
-                    'proveedor_id' => $request->input('proveedor_id'),
-                    'vencimiento' => $request->input('vencimiento') ?? null,
-                    'documento_tipo_id' => $request->input('documento_tipo_id'),
-                ]);
-
-            if ($response->successful()) {
-                return back()->with('success', 'Documento subido exitosamente.');
-            }
-
-            Log::error('General document upload failed', [
-                'user_id' => Auth::id(),
-                'status' => $response->status()
-            ]);
-
-            return back()->with('error', 'Error al procesar el documento. Intente nuevamente.');
-
-        } catch (\Exception $e) {
-            Log::error('General document upload exception', [
-                'user_id' => Auth::id(),
-                'error' => $e->getMessage()
-            ]);
-            
-            return back()->with('error', 'Error temporal del sistema. Intente nuevamente.');
-        }
-    }
-
     public function uploadDocumentacionApoderado(Request $request)
     {
         $this->validateUploadFile($request, ['tipo' => 'required|in:apoderado,representante']);

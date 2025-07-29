@@ -12,12 +12,7 @@
         </x-slot>
 
         <x-slot name="content">
-            <form 
-                action="{{ route('file.uploadDocumentacionGeneral') }}" 
-                method="POST" 
-                enctype="multipart/form-data"
-            >
-                @csrf
+            <form wire:submit.prevent="submit" enctype="multipart/form-data">
                 <div class="grid grid-cols-10 gap-4">
                     <input type="hidden" name="proveedor_id" value="{{ $proveedor_id }}">
 
@@ -25,18 +20,17 @@
                         Archivo
                     </div>
                     <div class="col-span-7">
-                        <input type="file" name="file" class="input-full" required accept=".pdf">
+                        <input type="file" wire:model="file" class="input-full" required accept=".pdf">
                     </div>
 
                     <div class="col-span-3 text-right mt-2">
                         Tipo de Documento
                     </div>
                     <div class="col-span-7">
-                        <select name="documento_tipo_id" id="documento_tipo_id" class="input-full" required>
+                        <select wire:model="documento_tipo_id" id="documento_tipo_id" class="input-full" required>
                             <option value="">Seleccionar tipo de documento</option>
-                            @foreach ($documentos as $doc)
+                            @foreach ($tipos_documentos as $doc)
                                 @php
-                                    // ✅ Compatible con API (array) y BD (objeto)
                                     $docObj = is_array($doc) ? (object) $doc : $doc;
                                 @endphp
                                 <option value="{{ $docObj->id }}">{{ $docObj->nombre }}</option>
@@ -48,7 +42,7 @@
                         Vencimiento (opcional)
                     </div>
                     <div class="col-span-7">
-                        <input type="date" name="vencimiento" class="input-full">
+                        <input type="date" wire:model="vencimiento" class="input-full">
                     </div>
                 </div>
 
@@ -56,6 +50,16 @@
                     <button type="submit" class="boton-celeste">Cargar Documento</button>
                 </div>
             </form>
+            @if ($successMessage)
+                <div class="bg-green-50 border-l-4 border-green-400 p-4 mt-6 text-green-900 text-sm rounded">
+                    {{ $successMessage }}
+                </div>
+            @endif
+            @if ($errorMessage)
+                <div class="bg-red-50 border-l-4 border-red-400 p-4 mt-6 text-red-900 text-sm rounded">
+                    {{ $errorMessage }}
+                </div>
+            @endif
             <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mt-6 text-blue-900 text-sm rounded">
                 <strong>Información:</strong> Una vez cargado el documento, deberá ser validado por la Gerencia de Legales de la empresa. En caso de rechazo, se le notificará por correo electrónico las razones. Gracias y disculpe las molestias.
             </div>

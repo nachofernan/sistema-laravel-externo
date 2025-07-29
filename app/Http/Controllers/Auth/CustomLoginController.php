@@ -25,6 +25,7 @@ class CustomLoginController extends Controller
      */
     public function login(Request $request)
     {
+        dd($request->all());
         $request->validate([
             'username' => 'required|string',
             'password' => 'required|string',
@@ -41,6 +42,10 @@ class CustomLoginController extends Controller
         }
         
         $request->session()->regenerate();
+
+        // Obtener y guardar el token JWT en la sesión
+        $token = app(\App\Http\Controllers\AuthController::class)->getNewToken();
+        session(['jwt_token' => $token]);
 
         return redirect()->intended(
             config('fortify.home')

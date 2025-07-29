@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             \App\Http\Middleware\SecurityHeaders::class,
+            \App\Http\Middleware\RefreshJwtToken::class,
         ]);
 
         //$middleware->append(\App\Http\Middleware\ForcePasswordChange::class);

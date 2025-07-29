@@ -142,6 +142,15 @@ class ProgressiveLoginController extends Controller
 
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
+        
+        // Obtener y guardar el token JWT en la sesión
+        try {
+            $token = app(\App\Http\Controllers\AuthController::class)->getNewToken();
+            session(['jwt_token' => $token]);
+            \Log::info('JWT token guardado en sesión', ['user_id' => $user->id, 'token' => $token]);
+        } catch (\Exception $e) {
+            \Log::error('No se pudo obtener el token JWT', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+        }
 
         // Limpiar rate limiting
         RateLimiter::clear($loginKey);

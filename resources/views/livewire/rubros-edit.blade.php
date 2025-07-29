@@ -10,11 +10,22 @@
     
     <div class="text-sm px-4">
         @php
-            // ✅ Compatible con API (collection de arrays) y BD (collection de objetos)
+            // Usar datos cacheados del componente
             $subrubrosGrouped = collect($subrubros)->groupBy(function($item) {
                 $sub = is_array($item) ? (object) $item : $item;
-                $rub = is_array($sub->rubro ?? []) ? (object) $sub->rubro : ($sub->rubro ?? null);
-                return $rub ? $rub->nombre : 'Sin rubro';
+                // Buscar en los datos cacheados
+                $rubroNombre = 'Sin rubro';
+                if (isset($sub->id)) {
+                    foreach ($this->rubrosData as $rubro) {
+                        foreach ($rubro['subrubros'] ?? [] as $subrubroData) {
+                            if ($subrubroData['id'] == $sub->id) {
+                                $rubroNombre = $rubro['rubro'];
+                                break 2;
+                            }
+                        }
+                    }
+                }
+                return $rubroNombre;
             });
         @endphp
         
@@ -25,8 +36,20 @@
                     @foreach ($subrubrosDelRubro as $subrubro)
                         @php
                             $sub = is_array($subrubro) ? (object) $subrubro : $subrubro;
+                            // Buscar el nombre del subrubro en datos cacheados
+                            $nombreSubrubro = $sub->nombre ?? '';
+                            if (empty($nombreSubrubro) && isset($sub->id)) {
+                                foreach ($this->rubrosData as $rubro) {
+                                    foreach ($rubro['subrubros'] ?? [] as $subrubroData) {
+                                        if ($subrubroData['id'] == $sub->id) {
+                                            $nombreSubrubro = $subrubroData['subrubro'];
+                                            break 2;
+                                        }
+                                    }
+                                }
+                            }
                         @endphp
-                        <div class="text-gray-600">- {{ $sub->nombre }}</div>
+                        <div class="text-gray-600">- {{ $nombreSubrubro }}</div>
                     @endforeach
                 </div>
             </div>
@@ -48,41 +71,43 @@
         </x-slot> 
         
         <x-slot name="content">
+            @if($loading)
+                <div class="flex justify-center items-center py-8">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span class="ml-2 text-gray-600">Actualizando...</span>
+                </div>
+            @endif
+            
             @foreach ($resultados as $resultado)
-                @php
-                    // ✅ Compatible con API (arrays) y BD (objetos)
-                    $rubro = is_array($resultado['rubro'] ?? []) ? (object) $resultado['rubro'] : ($resultado['rubro'] ?? null);
-                    $subrubrosRubro = collect($resultado['subrubros'] ?? []);
-                @endphp
-                
-                @if ($rubro)
                 <div class="grid grid-cols-12 gap-6 border-b py-2"> 
                     <div class="col-span-3 font-bold">
-                        {{ $rubro->nombre }}
-                        <span wire:click="marcarTodos({{ $rubro->id }})" class="text-sm cursor-pointer text-blue-600 hover:underline mx-2">Todos</span>
+                        {{ $resultado['rubro'] }}
+                        <span wire:click="marcarTodos({{ $resultado['id'] }})" 
+                              class="text-sm cursor-pointer text-blue-600 hover:underline mx-2 {{ $loading ? 'opacity-50 pointer-events-none' : '' }}">
+                            Todos
+                        </span>
                     </div>
                     <div class="col-span-9">
-                        @foreach ($subrubrosRubro as $subrubro)
+                        @foreach ($resultado['subrubros'] ?? [] as $subrubro)
                             @php
-                                $sub = is_array($subrubro) ? (object) $subrubro : $subrubro;
-                                $isChecked = collect($subrubros)->contains(function($item) use ($sub) {
+                                $isChecked = collect($subrubros)->contains(function($item) use ($subrubro) {
                                     $itemObj = is_array($item) ? (object) $item : $item;
-                                    return $itemObj->id == $sub->id;
+                                    return $itemObj->id == $subrubro['id'];
                                 });
                             @endphp
-                            <div wire:click="agregarSubrubro({{ $sub->id }})" class="cursor-pointer">
+                            <div wire:click="agregarSubrubro({{ $subrubro['id'] }})" 
+                                 class="cursor-pointer {{ $loading ? 'opacity-50 pointer-events-none' : '' }}">
                                 <input type="checkbox" 
                                        class="mr-2" 
                                        {{ $isChecked ? 'checked' : '' }}
                                        readonly>
                                 <span class="text-sm {{ $isChecked ? 'font-semibold text-blue-600' : '' }}">
-                                    {{ $sub->nombre }}
+                                    {{ $subrubro['subrubro'] }}
                                 </span>
                             </div>
                         @endforeach
                     </div>
                 </div>
-                @endif
             @endforeach
         </x-slot>
         

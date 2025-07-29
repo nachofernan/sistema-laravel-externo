@@ -60,7 +60,7 @@ Route::middleware(['guest'])->group(function () {
     })->name('gracias');
 
     // === RUTAS DE RESPALDO (si quieres mantener el sistema anterior temporalmente) ===
-    Route::prefix('legacy')->group(function () {
+    /* Route::prefix('legacy')->group(function () {
         Route::get('/login', [CustomLoginController::class, 'showLoginForm'])
             ->name('legacy.login');
         Route::post('/login', [CustomLoginController::class, 'login'])
@@ -71,7 +71,7 @@ Route::middleware(['guest'])->group(function () {
             ->name('legacy.provider.register');
         Route::post('/check-cuit', [ProviderRegistrationController::class, 'checkCuit'])
             ->name('legacy.provider.check-cuit');
-    });
+    }); */
 
     // === RECUPERACIÓN DE CONTRASEÑA ===
     Route::get('/forgot-password', [PasswordResetController::class, 'showForgotForm'])
@@ -93,6 +93,10 @@ Route::middleware([
     'verified',
     'force.password.change'
 ])->group(function () {
+
+    /* Route::get('/login', function () {
+        dd('login');
+    })->name('login'); */
     
     // Dashboard principal
     Route::get('/dashboard', [ProveedorController::class, 'dashboard'])
@@ -115,8 +119,6 @@ Route::middleware([
         // Subida de archivos
         Route::post('/upload/{invitacion}', [FileController::class, 'uploadFileToPlataforma'])
             ->name('upload');
-        Route::post('/upload-general', [FileController::class, 'uploadDocumentacionGeneral'])
-            ->name('uploadDocumentacionGeneral');
         Route::post('/upload-apoderado', [FileController::class, 'uploadDocumentacionApoderado'])
             ->name('uploadDocumentacionApoderado');
         

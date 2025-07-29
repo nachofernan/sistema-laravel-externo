@@ -21,7 +21,7 @@ class AuthController extends Controller
 
         try {
             $response = Http::timeout(10) // ✅ Timeout de 10 segundos
-                ->post($this->getApiUrl() . '/generate-token', [
+                ->post($this->getApiUrl() . '/api/generate-token', [
                     'cuit' => $user->username,
                     'email' => $user->email
                 ]);
