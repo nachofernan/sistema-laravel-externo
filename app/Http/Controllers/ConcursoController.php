@@ -31,7 +31,8 @@ class ConcursoController extends Controller
             $api = new ConcursosApiService($token, $user->username);
             $concursosData = $api->getConcursos();
     
-            if (!$concursosData) {
+            // Verificar si hubo un error real en la API (null) vs array vacío (sin concursos)
+            if ($concursosData === null) {
                 Log::error('Concursos Index: No se pudo obtener datos de concursos', [
                     'user_id' => $user->id,
                     'cuit' => $user->username,
