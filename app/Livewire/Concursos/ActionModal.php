@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Livewire\Component;
+use App\Services\ConcursosApiService;
 
 class ActionModal extends Component
 {
@@ -14,132 +15,270 @@ class ActionModal extends Component
     public $concurso;
     public $invitacion;
     public $documentacion_completa;
+    public $concurso_activo;
+    public $antes_del_cierre;
+    public $obligatorios_completos;
+    
+    // Propiedades para dar de baja la oferta
+    public $dando_baja = false;
+    public $password = '';
 
     public function mount($concurso, $invitacion) {
         $this->concurso = $concurso;
         $this->invitacion = $invitacion;
-        $this->documentacion_completa = $this->checkDocumentacion();
+        $this->initializeState();
+    }
+
+    private function initializeState()
+    {
+        // Verificar si el concurso está activo y antes del cierre
+        $this->concurso_activo = isset($this->concurso->estado) && 
+            (is_array($this->concurso->estado) ? $this->concurso->estado['estado_actual'] : $this->concurso->estado->estado_actual) == 'activo';
+        
+        $this->antes_del_cierre = isset($this->concurso->fecha_cierre) && 
+            Carbon::parse($this->concurso->fecha_cierre)->isFuture();
+        
+        // Verificar documentación
+        $this->checkDocumentacion();
     }
 
     public function checkDocumentacion() {
+        $this->documentacion_completa = true;
+        $this->obligatorios_completos = true;
         try {
-            // ✅ Verificar si los datos vienen de API (objeto stdClass) o BD (modelo)
-            if (is_object($this->concurso) && !method_exists($this->concurso, 'documentos_requeridos')) {
-                // Los datos vienen de API - usar propiedades directas
-                return $this->checkDocumentacionFromApi();
-            } else {
-                // Los datos vienen de BD - usar métodos de modelo (compatibilidad)
-                return $this->checkDocumentacionFromModel();
-            }
+            $this->checkDocumentacionFromApi();
+            // Debug log
+            Log::info('Documentación check result', [
+                'concurso_id' => $this->concurso->id ?? 'unknown',
+                'completa' => $this->documentacion_completa,
+                'intencion' => $this->invitacion->intencion ?? 'unknown'
+            ]);
         } catch (\Exception $e) {
             Log::error('Error checking documentation', [
                 'error' => $e->getMessage(),
                 'concurso_id' => $this->concurso->id ?? 'unknown'
             ]);
-            return false;
+            $this->documentacion_completa = false;
+            $this->obligatorios_completos = false;
         }
     }
 
     /**
-     * ✅ Verificación para datos que vienen de API
+     * Verificar documentación basándose en los tipos de documentos de oferta
      */
     private function checkDocumentacionFromApi()
     {
-        if (!isset($this->concurso->documentos_requeridos) || !is_array($this->concurso->documentos_requeridos)) {
-            return true; // Si no hay documentos requeridos, está completa
-        }
-
-        foreach($this->concurso->documentos_requeridos as $documento_tipo) {
-            // Solo validar si es obligatorio
-            if (!$documento_tipo->obligatorio) {
-                continue;
-            }
-
-            // Contar documentos subidos de este tipo
-            $docs_subidos = $this->countDocumentosByTipoFromApi($documento_tipo->id);
+        // Obtener los tipos de documentos de oferta
+        $tiposDocumentosOferta = $this->getTiposDocumentosOferta();
+        
+        foreach($tiposDocumentosOferta as $tipoDocumento) {
+            // Verificar si tiene documentos subidos
+            $tieneDocumentos = isset($tipoDocumento['documentos_oferta']) && 
+                              is_array($tipoDocumento['documentos_oferta']) && 
+                              count($tipoDocumento['documentos_oferta']) > 0;
             
-            if ($docs_subidos == 0) {
-                // Si tiene documento de proveedor asociado, verificar si está vigente
-                if (isset($documento_tipo->tipo_documento_proveedor) && $documento_tipo->tipo_documento_proveedor) {
-                    $doc_proveedor = $this->findProveedorDocumentFromApi($documento_tipo->tipo_documento_proveedor->id);
-                    
-                    if (!$doc_proveedor) {
-                        return false; // Documento de proveedor no existe
-                    }
-                    
-                    if (isset($doc_proveedor->vencimiento) && $doc_proveedor->vencimiento) {
-                        if (Carbon::parse($doc_proveedor->vencimiento)->isPast()) {
-                            return false; // Documento vencido
-                        }
-                    }
+            if (!$tieneDocumentos) {
+                // Si no tiene documentos subidos, verificar si tiene documento de proveedor asociado
+                if ($tipoDocumento['tipo_documento_proveedor_id'] 
+                    && ($tipoDocumento['tipo_documento_proveedor']['fecha_vencimiento'] 
+                    && Carbon::parse($tipoDocumento['tipo_documento_proveedor']['fecha_vencimiento'])->greaterThan(Carbon::parse($this->concurso->fecha_cierre)))
+                    || !$tipoDocumento['tipo_documento_proveedor']['fecha_vencimiento']) {
+                        continue;
+                }
+                $this->documentacion_completa = false;
+                if ($tipoDocumento['obligatorio']) {
+                    $this->obligatorios_completos = false;
+                }
+            }
+        }
+    }
+
+    /**
+     * Obtener tipos de documentos de oferta
+     */
+    private function getTiposDocumentosOferta()
+    {
+        // Si ya están cargados en el concurso, usarlos
+        if (isset($this->concurso->tipos_documentos_oferta)) {
+            return $this->concurso->tipos_documentos_oferta;
+        }
+
+        // Si no, cargarlos desde la API
+        try {
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new \App\Services\ConcursosApiService($token, $user->username);
+            return $api->getTiposDocumentosOferta($this->concurso->id) ?? [];
+        } catch (\Exception $e) {
+            Log::error('Error getting tipos documentos oferta', [
+                'error' => $e->getMessage(),
+                'concurso_id' => $this->concurso->id ?? 'unknown'
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Determinar el estado actual del botón principal
+     */
+    public function getEstadoBoton()
+    {
+        $intencion = $this->invitacion->intencion ?? 0;
+        
+        // Si el concurso no está activo o ya pasó la fecha de cierre
+        if (!$this->concurso_activo || !$this->antes_del_cierre) {
+            return 'inactivo';
+        }
+
+        // Estados según intención
+        switch ($intencion) {
+            case 0: // Sin intención definida
+                return 'participar';
+            
+            case 1: // Con intención de participar
+                if ($this->documentacion_completa && $this->obligatorios_completos) {
+                    return 'presentar_oferta_completa';
+                } elseif (!$this->obligatorios_completos) {
+                    return 'falta_documentacion_obligatoria';
                 } else {
-                    return false; // Documento requerido no subido
+                    return 'presentar_oferta_faltante';
                 }
-            }
+            
+            case 2: // Intención rechazada
+                return 'arrepentimiento';
+            
+            case 3: // Oferta presentada
+                return 'oferta_presentada';
+            
+            default:
+                return 'inactivo';
         }
-        
-        return true;
     }
 
     /**
-     * ✅ Verificación para datos que vienen de BD (compatibilidad hacia atrás)
+     * Determinar si se debe mostrar el modal
      */
-    private function checkDocumentacionFromModel()
+    public function getMostrarModal()
     {
-        foreach($this->concurso->documentos_requeridos as $documento_tipo) {
-            $sin_docs_subidos = count($this->invitacion->documentos_con_tipo_id($documento_tipo->id)) == 0;
-        
-            // Solo validar si es obligatorio
-            if ($documento_tipo->obligatorio) {
-                if($documento_tipo->tipo_documento_proveedor) {
-                    $doc_prov = Auth::user()->proveedor->traer_documento($documento_tipo->tipo_documento_proveedor->id);
-                    if($doc_prov && $doc_prov->vencimiento && Carbon::create($doc_prov->vencimiento)->isPast() && $sin_docs_subidos) {
-                        return false;
-                    } elseif(!$doc_prov && $sin_docs_subidos) {
-                        return false;
-                    }
-                } elseif($sin_docs_subidos) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        $estado = $this->getEstadoBoton();
+        return in_array($estado, ['participar', 'presentar_oferta_completa', 'presentar_oferta_faltante', 'arrepentimiento', 'oferta_presentada']);
     }
 
     /**
-     * ✅ Contar documentos de un tipo específico desde datos de API
+     * Dar de baja la oferta
      */
-    private function countDocumentosByTipoFromApi($documentoTipoId)
+    public function darBajaOferta()
     {
-        if (!isset($this->invitacion->documentos) || !is_array($this->invitacion->documentos)) {
-            return 0;
+        if (!$this->puedeDarBaja()) {
+            $this->addError('baja', 'No se puede dar de baja la oferta.');
+            return;
         }
 
-        $count = 0;
-        foreach ($this->invitacion->documentos as $documento) {
-            if ($documento->documento_tipo_id == $documentoTipoId) {
-                $count++;
-            }
+        if ($this->concursoCerrado()) {
+            $this->addError('baja', 'No se puede dar de baja la oferta de un concurso cerrado.');
+            return;
         }
-        
-        return $count;
+
+        if (empty($this->password)) {
+            $this->addError('password', 'Debe ingresar su contraseña para confirmar la acción.');
+            return;
+        }
+
+        // Validar la contraseña del usuario autenticado
+        if (!\Illuminate\Support\Facades\Hash::check($this->password, \Illuminate\Support\Facades\Auth::user()->password)) {
+            $this->addError('password', 'La contraseña ingresada es incorrecta.');
+            return;
+        }
+
+        $this->dando_baja = true;
+
+        try {
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new ConcursosApiService($token, $user->username);
+            
+            $success = $api->darBajaOferta($this->concurso->id);
+
+            if ($success) {
+                Log::info('Oferta dada de baja exitosamente', [
+                    'user_id' => Auth::id(),
+                    'concurso_id' => $this->concurso->id
+                ]);
+
+                $this->open = false;
+                $this->dando_baja = false;
+                $this->password = '';
+                
+                $this->dispatch('oferta-dada-baja', [
+                    'concurso_id' => $this->concurso->id
+                ]);
+
+                session()->flash('success', 'Oferta dada de baja correctamente. Todos los documentos han sido eliminados.');
+            } else {
+                Log::error('Error al dar de baja la oferta', [
+                    'user_id' => Auth::id(),
+                    'concurso_id' => $this->concurso->id
+                ]);
+
+                $this->addError('baja', 'Error al dar de baja la oferta. Intente nuevamente.');
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Excepción al dar de baja la oferta', [
+                'user_id' => Auth::id(),
+                'concurso_id' => $this->concurso->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $this->addError('baja', 'Error temporal del sistema. Intente nuevamente.');
+        }
+
+        $this->dando_baja = false;
     }
 
     /**
-     * ✅ Encontrar documento de proveedor desde datos de API
+     * Verificar si el concurso está cerrado
      */
-    private function findProveedorDocumentFromApi($documentoTipoId)
+    private function concursoCerrado()
     {
-        // Si los datos del proveedor están en invitacion
-        if (isset($this->invitacion->proveedor->documentos) && is_array($this->invitacion->proveedor->documentos)) {
-            foreach ($this->invitacion->proveedor->documentos as $documento) {
-                if ($documento->documento_tipo_id == $documentoTipoId) {
-                    return $documento;
-                }
+        if (!$this->concurso) {
+            return true;
+        }
+
+        if (isset($this->concurso->estado) && is_array($this->concurso->estado)) {
+            if (isset($this->concurso->estado['id']) && $this->concurso->estado['id'] == 3) {
+                return true;
             }
         }
-        
-        return null;
+
+        if (isset($this->concurso->fecha_cierre)) {
+            $fechaCierre = is_string($this->concurso->fecha_cierre) 
+                ? Carbon::parse($this->concurso->fecha_cierre)
+                : $this->concurso->fecha_cierre;
+            
+            if (now()->gte($fechaCierre)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Verificar si puede dar de baja la oferta
+     */
+    private function puedeDarBaja()
+    {
+        if ($this->concursoCerrado()) {
+            return false;
+        }
+
+        if ($this->invitacion && isset($this->invitacion->intencion)) {
+            return $this->invitacion->intencion == 3;
+        }
+
+        return false;
     }
 
     public function render()

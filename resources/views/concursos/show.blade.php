@@ -1,52 +1,56 @@
 <x-app-layout>
-    <div class="w-full xl:w-10/12 mb-12 xl:mb-0 px-4 mx-auto pb-10 mt-4">
+    @php
+        $concursoObj = is_array($concurso) ? (object) $concurso : $concurso;
+        $estado = is_array($concursoObj->estado ?? null) ? (object) ($concursoObj->estado ?? []) : ($concursoObj->estado ?? null);
+        $invitacion = is_array($concursoObj->invitacion ?? null) ? (object) ($concursoObj->invitacion ?? []) : ($concursoObj->invitacion ?? null);
+        $contactos = is_array($concursoObj->contactos ?? null) ? collect($concursoObj->contactos) : collect($concursoObj->contactos ?? []);
+        $documentos = is_array($concursoObj->documentos ?? null) ? collect($concursoObj->documentos) : collect($concursoObj->documentos ?? []);
+        $documentosRequeridos = is_array($concursoObj->documentos_requeridos ?? null) ? collect($concursoObj->documentos_requeridos) : collect($concursoObj->documentos_requeridos ?? []);
+        $prorrogas = is_array($concursoObj->prorrogas ?? null) ? collect($concursoObj->prorrogas) : collect($concursoObj->prorrogas ?? []);
+        $sedes = is_array($concursoObj->sedes ?? null) ? collect($concursoObj->sedes) : collect($concursoObj->sedes ?? []);
+    @endphp
+    
+    <div class="w-full xl:w-10/12 mb-12 xl:mb-0 px-4 mx-auto pb-10 mt-4" 
+         x-data="{}" 
+         @documento-subido.window="window.location.reload()"
+         @documento-eliminado.window="window.location.reload()"
+         @oferta-dada-baja.window="window.location.reload()">
+        
+        {{-- Notificaciones --}}
+        @if (session('success'))
+            <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-4 text-green-900 rounded">
+                {{ session('success') }}
+            </div>
+        @endif
+
+        @if (session('error'))
+            <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-4 text-red-900 rounded">
+                {{ session('error') }}
+            </div>
+        @endif
+        
         <div class="bg-white shadow-xl rounded-lg overflow-hidden">
-            <div
-                class="flex justify-between border-b text-white font-bold bg-gradient-to-r p-6
-            @switch($concurso->estado->id ?? $concurso->estado['id'])
-                @case(1)
-                from-orange-700 to-orange-400
-                    @break
-                @case(2)
-                @if (\Carbon\Carbon::parse($concurso->fecha_cierre)->isFuture())
+            <div class="flex justify-between border-b text-white font-bold bg-gradient-to-r p-6
+                @if (isset($estado) && $estado->estado_actual == 'activo')
                     from-green-700 to-green-400
+                @elseif (isset($estado) && $estado->estado_actual == 'abierto')
+                    from-blue-700 to-blue-400
                 @else
-                    from-yellow-700 to-yellow-400
-                @endif
-                    @break
-                @case(3)
-                from-blue-700 to-blue-400
-                    @break
-                @case(4)
-                from-blue-700 to-blue-400
-                    @break
-                @case(5)
-                from-red-700 to-red-400
-                    @break
-            @endswitch
-            ">
+                    from-gray-700 to-gray-400
+                @endif">
                 <div>
                     <div class="text-2xl font-bold text-white">
-                        {{ $concurso->nombre }}
+                        {{ $concursoObj->nombre ?? 'Sin nombre' }}
                     </div>
                     <div class="font-normal">
-                        #{{ $concurso->numero ?? 'Sin Número' }} -
-                        @switch($concurso->estado->id ?? $concurso->estado['id'])
-                            @case(2)
-                                @if (\Carbon\Carbon::parse($concurso->fecha_cierre)->isFuture())
-                                    Activo
-                                @else
-                                    Cerrado
-                                @endif
-                            @break
-
-                            @default
-                                {{ $concurso->estado->nombre ?? $concurso->estado['nombre'] }}
-                        @endswitch
+                        #{{ $concursoObj->numero ?? 'Sin Número' }} - 
+                        {{ $estado->estado_actual ?? 'Estado no definido' }}
                     </div>
                 </div>
-                <div class="text-sm flex justify-end gap-4 items-center">
-                    @livewire('concursos.action-modal', ['concurso' => $concurso, 'invitacion' => $invitacion])
+                <div class="flex items-center">
+                    @if($invitacion)
+                        @livewire('concursos.action-modal', ['concurso' => $concursoObj, 'invitacion' => $invitacion], key('action-modal-' . $concursoObj->id))
+                    @endif
                 </div>
             </div>
 
@@ -66,128 +70,88 @@
                             <dl class="space-y-4 text-sm" aria-labelledby="datos-generales">
                                 <div class="flex justify-between border-b pb-2">
                                     <dt class="font-medium text-gray-600">Nombre</dt>
-                                    <dd class="text-gray-800">{{ $concurso->nombre }}</dd>
+                                    <dd class="text-gray-800">{{ $concursoObj->nombre ?? 'Sin nombre' }}</dd>
                                 </div>
 
                                 <div class="flex justify-between border-b pb-2">
                                     <dt class="font-medium text-gray-600">Número</dt>
-                                    <dd class="text-gray-800">#{{ $concurso->numero ?? 'Sin Número' }}</dd>
+                                    <dd class="text-gray-800">#{{ $concursoObj->numero ?? 'Sin Número' }}</dd>
                                 </div>
 
                                 <div class="flex justify-between border-b pb-2">
                                     <dt class="font-medium text-gray-600">Descripción</dt>
-                                    <dd class="text-gray-800 text-right">{{ $concurso->descripcion }}</dd>
+                                    <dd class="text-gray-800 text-right">{{ $concursoObj->descripcion ?? 'Sin descripción' }}</dd>
                                 </div>
 
-                                <div class="flex justify-between border-b pb-2">
-                                    <dt class="font-medium text-gray-600">Sedes</dt>
-                                    <dd class="text-right">
-                                        @php
-                                            $sedes = $concurso->sedes ?? [];
-                                            if (is_object($sedes)) {
-                                                $sedes = (array) $sedes;
-                                            }
-                                        @endphp
-                                        @foreach ($sedes as $sede)
-                                            @php
-                                                // ✅ Manejar tanto objetos como arrays
-                                                $nombreSede = '';
-                                                if (is_object($sede)) {
-                                                    $nombreSede = $sede->nombre_sede ?? ($sede->nombre ?? 'Sede');
-                                                } elseif (is_array($sede)) {
-                                                    $nombreSede = $sede['nombre_sede'] ?? ($sede['nombre'] ?? 'Sede');
-                                                }
+                                @if ($sedes->count() > 0)
+                                    <div class="flex justify-between border-b pb-2">
+                                        <dt class="font-medium text-gray-600">Sedes</dt>
+                                        <dd class="text-right">
+                                            @foreach ($sedes as $sede)
+                                                @php $sedeObj = is_array($sede) ? (object) $sede : $sede; @endphp
+                                                <div>{{ $sedeObj->nombre ?? 'Sede' }}</div>
+                                            @endforeach
+                                        </dd>
+                                    </div>
+                                @endif
 
-                                                // Mapeo de IDs a nombres (fallback)
-                                                if (empty($nombreSede) && isset($sede['sede_id'])) {
-                                                    $sedeMap = [
-                                                        1 => 'La Plata',
-                                                        2 => 'Mar del Plata',
-                                                        3 => 'Villa Gesell',
-                                                        4 => 'Mar de Ajó',
-                                                        5 => 'Necochea',
-                                                    ];
-                                                    $nombreSede = $sedeMap[$sede['sede_id']] ?? 'Sede no definida';
-                                                }
-                                            @endphp
-                                            <div>{{ $nombreSede }}</div>
-                                        @endforeach
-                                    </dd>
-                                </div>
+                                @if (isset($concursoObj->fecha_inicio))
+                                    <div class="flex justify-between border-b pb-2">
+                                        <dt class="font-medium text-gray-600">Fecha Inicio</dt>
+                                        <dd class="text-gray-800">
+                                            {{ \Carbon\Carbon::parse($concursoObj->fecha_inicio)->format('d-m-Y - H:i') }}
+                                        </dd>
+                                    </div>
+                                @endif
 
-                                <div class="flex justify-between border-b pb-2">
-                                    <dt class="font-medium text-gray-600">Fecha Inicio</dt>
-                                    <dd class="text-gray-800">
-                                        {{ \Carbon\Carbon::parse($concurso->fecha_inicio)->format('d-m-Y - H:i') }}</dd>
-                                </div>
+                                @if (isset($concursoObj->fecha_cierre))
+                                    <div class="flex justify-between border-b pb-2">
+                                        <dt class="font-medium text-gray-600">Fecha Cierre</dt>
+                                        <dd class="text-gray-800">
+                                            {{ \Carbon\Carbon::parse($concursoObj->fecha_cierre)->format('d-m-Y - H:i') }}
+                                        </dd>
+                                    </div>
+                                @endif
                             </dl>
                         </div>
 
-                        <div class="bg-gray-50 px-2 py-4">
-                            <div class="flex justify-between items-center px-4">
-                                <span class="font-medium text-gray-600">Fecha Cierre</span>
-                                <span
-                                    class="text-gray-800 font-bold">{{ \Carbon\Carbon::parse($concurso->fecha_cierre)->format('d-m-Y - H:i') }}</span>
-                            </div>
-
-                            @php
-                                $prorrogas = $concurso->prorrogas ?? [];
-                                if (is_object($prorrogas)) {
-                                    $prorrogas = (array) $prorrogas;
-                                }
-                            @endphp
-                            @if (count($prorrogas) > 0)
+                        @if ($prorrogas->count() > 0)
+                            <div class="bg-gray-50 px-2 py-4">
                                 <div class="mt-4 space-y-2 bg-white rounded-md shadow-sm py-2 text-xs">
                                     @foreach ($prorrogas as $key => $prorroga)
-                                        @php
-                                            $fechaAnterior = is_object($prorroga)
-                                                ? $prorroga->fecha_anterior
-                                                : $prorroga['fecha_anterior'];
-                                            $fechaActual = is_object($prorroga)
-                                                ? $prorroga->fecha_actual
-                                                : $prorroga['fecha_actual'];
-                                        @endphp
+                                        @php $prorrogaObj = is_array($prorroga) ? (object) $prorroga : $prorroga; @endphp
                                         <div class="flex justify-between items-center px-4">
                                             <span class="font-medium">Prórroga {{ $key + 1 }}</span>
                                             <div class="text-xs text-gray-600">
-                                                {{ \Carbon\Carbon::parse($fechaAnterior)->format('d-m-Y - H:i') }}
+                                                {{ \Carbon\Carbon::parse($prorrogaObj->fecha_anterior)->format('d-m-Y - H:i') }}
                                                 <span class="mx-2">➔</span>
-                                                {{ \Carbon\Carbon::parse($fechaActual)->format('d-m-Y - H:i') }}
+                                                {{ \Carbon\Carbon::parse($prorrogaObj->fecha_actual)->format('d-m-Y - H:i') }}
                                             </div>
                                         </div>
                                     @endforeach
                                 </div>
-                            @endif
-                        </div>
+                            </div>
+                        @endif
                     </div>
 
                     <!-- Contactos Card -->
-                    @php
-                        $contactos = $concurso->contactos ?? [];
-                        if (is_object($contactos)) {
-                            $contactos = (array) $contactos;
-                        }
-                    @endphp
-                    @if (count($contactos) > 0)
+                    @if ($contactos->count() > 0)
                         <div class="bg-white shadow-md rounded-lg overflow-hidden mb-6">
                             <div class="bg-gray-100 p-4 text-lg">
                                 <h2 class="font-medium text-gray-700">Contactos</h2>
                             </div>
                             <div class="p-6">
                                 @foreach ($contactos as $contacto)
-                                    @php
-                                        $nombre = is_object($contacto) ? $contacto->nombre : $contacto['nombre'];
-                                        $tipo = is_object($contacto) ? $contacto->tipo : $contacto['tipo'];
-                                        $correo = is_object($contacto) ? $contacto->correo : $contacto['correo'];
-                                        $telefono = is_object($contacto) ? $contacto->telefono : $contacto['telefono'];
-                                    @endphp
+                                    @php $contactoObj = is_array($contacto) ? (object) $contacto : $contacto; @endphp
                                     <div class="border-b pb-2 mb-2 last:border-b-0 last:mb-0">
                                         <div class="font-medium">
-                                            {{ $nombre }} -
-                                            <span
-                                                class="text-gray-600 text-sm">{{ $tipo == 'administrativo' ? 'Administrativo' : 'Técnico' }}</span>
+                                            {{ $contactoObj->nombre ?? 'Sin nombre' }} - 
+                                            <span class="text-gray-600 text-sm">
+                                                {{ $contactoObj->tipo == 'administrativo' ? 'Administrativo' : 'Técnico' }}
+                                            </span>
                                         </div>
-                                        <div class="text-xs text-gray-600">{{ $correo }} - {{ $telefono }}
+                                        <div class="text-xs text-gray-600">
+                                            {{ $contactoObj->correo ?? 'Sin correo' }} - {{ $contactoObj->telefono ?? 'Sin teléfono' }}
                                         </div>
                                     </div>
                                 @endforeach
@@ -196,53 +160,37 @@
                     @endif
 
                     <!-- Documentación Adjunta Card -->
-                    <div class="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-                        <div class="bg-gray-100 p-4 text-lg">
-                            <h2 class="font-medium text-gray-700">Documentación Adjunta al Concurso</h2>
-                        </div>
-                        <div class="p-6">
-                            @php
-                                $documentos = $concurso->documentos ?? [];
-                                if (is_object($documentos)) {
-                                    $documentos = (array) $documentos;
-                                }
-                            @endphp
-                            @if (count($documentos) > 0)
+                    @if ($documentos->count() > 0)
+                        <div class="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+                            <div class="bg-gray-100 p-4 text-lg">
+                                <h2 class="font-medium text-gray-700">Documentación Adjunta al Concurso</h2>
+                            </div>
+                            <div class="p-6">
                                 <div class="space-y-3">
                                     @foreach ($documentos as $documento)
-                                        @php
-                                            $docTipo = is_object($documento)
-                                                ? $documento->documentoTipo
-                                                : $documento['documento_tipo'];
-                                            $nombreTipo = is_object($docTipo) ? $docTipo->nombre : $docTipo['nombre'];
-                                            $createdAt = is_object($documento)
-                                                ? $documento->created_at
-                                                : $documento['created_at'];
-                                            $fileStorage = is_object($documento)
-                                                ? $documento->file_storage
-                                                : $documento['file_storage'];
+                                        @php 
+                                            $documentoObj = is_array($documento) ? (object) $documento : $documento;
+                                            $documentoTipo = is_array($documentoObj->documento_tipo ?? null) ? (object) ($documentoObj->documento_tipo ?? []) : ($documentoObj->documento_tipo ?? null);
                                         @endphp
                                         <div class="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
                                             <div>
-                                                <div class="font-medium">{{ $nombreTipo }}</div>
-                                                <div class="text-xs text-gray-500">Cargado el
-                                                    {{ \Carbon\Carbon::parse($createdAt)->format('d-m-Y') }}</div>
+                                                <div class="font-medium">{{ $documentoTipo->nombre ?? 'Documento' }}</div>
+                                                <div class="text-xs text-gray-500">
+                                                    Cargado el {{ \Carbon\Carbon::parse($documentoObj->created_at)->format('d-m-Y') }}
+                                                </div>
                                             </div>
-                                            <form action="{{ route('file.download') }}" method="POST">
+                                            <form action="{{ route('file.download-concurso-documento') }}" method="POST">
                                                 @csrf
-                                                <input type="hidden" name="disk" value="concursos">
-                                                <input type="hidden" name="fileName" value="{{ $fileStorage }}">
-                                                <button type="submit"
-                                                    class="text-blue-600 hover:underline">Descargar</button>
+                                                <input type="hidden" name="concurso_id" value="{{ $concursoObj->id }}">
+                                                <input type="hidden" name="documento_id" value="{{ $documentoObj->media_id }}">
+                                                <button type="submit" class="text-blue-600 text-sm hover:underline">Descargar</button>
                                             </form>
                                         </div>
                                     @endforeach
                                 </div>
-                            @else
-                                <div class="text-gray-500 italic">Sin documentación</div>
-                            @endif
+                            </div>
                         </div>
-                    </div>
+                    @endif
                 </div>
 
                 <!-- Required Documentation Column -->
@@ -253,388 +201,351 @@
                                 Documentación Requerida para Participar
                             </h2>
                         </div>
-                        <div class="p-6">
-                            @if (
-                                ($invitacion->intencion == 1 || $invitacion->intencion == 3) &&
-                                    ($concurso->estado->id == 2 && \Carbon\Carbon::parse($concurso->fecha_cierre)->isFuture()))
-                                <div
-                                    class="mb-4 border-l-4 border-orange-800 bg-orange-50 text-orange-800 px-4 py-2 text-xs">
-                                    La documentación cargada se encuentra encriptada, sólo podrá ser visualizada por el
-                                    personal una vez finalizado el concurso.
-                                    <br>
-                                    De ser necesaria, la documentación faltante será requerida mediante correo
-                                    electrónico.
-                                    <br>
-                                    <span class="font-semibold">La documentación debe ser subida en formato PDF, JPG,
-                                        JPEG o PNG con un máximo de 10Mb por archivo.</span>
-                                </div>
-                            @endif
-
-                            <div class="mb-4 border-l-4 border-green-800 bg-green-50 text-green-800 px-4 py-2 text-xs">
-                                Documentación ya cargada de Representantes legales y apoderados habilitados para firmar:
-                                @php
-                                    $apoderados = $invitacion->proveedor->apoderados ?? [];
-                                    if (is_object($apoderados)) {
-                                        $apoderados = (array) $apoderados;
-                                    }
-                                @endphp
-                                @foreach ($apoderados as $apoderado)
+                        <div class="px-6 py-2">
+                            @if ($documentosRequeridos->count() > 0)
+                                <div class="space-y-2">
+                                    
+                                    {{-- Documentos de Oferta (solo si la invitación está aceptada) --}}
                                     @php
-                                        $documentosApoderado = is_object($apoderado)
-                                            ? $apoderado->documentos ?? []
-                                            : $apoderado['documentos'] ?? [];
-                                        if (is_object($documentosApoderado)) {
-                                            $documentosApoderado = (array) $documentosApoderado;
-                                        }
-                                        $activo = is_object($apoderado)
-                                            ? $apoderado->activo ?? true
-                                            : $apoderado['activo'] ?? true;
+                                        $invitacionObj = is_array($invitacion) ? (object) $invitacion : $invitacion;
+                                        $puedeSubirOferta = isset($invitacionObj->intencion) && in_array($invitacionObj->intencion, [1, 3]);
+                                        
+                                        // Lógica para determinar si puede cargar archivos
+                                        $concursoActivo = isset($estado) && $estado->estado_actual == 'activo';
+                                        $antesDelCierre = isset($concursoObj->fecha_cierre) && \Carbon\Carbon::parse($concursoObj->fecha_cierre)->isFuture();
+                                        $concursoAnalisis = isset($estado) && $estado->estado_actual == 'analisis';
+                                        $permiteCarga = isset($concursoObj->permite_carga) && ($concursoObj->permite_carga == true || $concursoObj->permite_carga == 1);
+                                        
+                                        // Para documentos de oferta: solo si está activo y antes del cierre
+                                        $puedeCargarOferta = $concursoActivo && $antesDelCierre;
+                                        
+                                        // Para documentos adicionales: si está activo y antes del cierre, O si está en análisis y permite carga
+                                        $puedeCargarAdicionales = ($concursoActivo && $antesDelCierre) || ($concursoAnalisis && $permiteCarga);
                                     @endphp
-                                    @if ($activo && count($documentosApoderado) > 0)
+                                    
+                                    @if ($puedeSubirOferta)
+                                        {{-- Tipos de Documentos de Oferta --}}
                                         @php
-                                            $primerDoc = array_values($documentosApoderado)[0];
-                                            $fileStorage = is_object($primerDoc)
-                                                ? $primerDoc->file_storage
-                                                : $primerDoc['file_storage'];
-                                            $nombre = is_object($apoderado) ? $apoderado->nombre : $apoderado['nombre'];
+                                            $tiposDocumentosOferta = isset($concursoObj->tipos_documentos_oferta) ? collect($concursoObj->tipos_documentos_oferta) : collect([]);
+                                            $concursoActivo = isset($estado) && $estado->estado_actual == 'activo';
+                                            $antesDelCierre = isset($concursoObj->fecha_cierre) && \Carbon\Carbon::parse($concursoObj->fecha_cierre)->isFuture();
+                                            $puedeEliminar = $concursoActivo && $antesDelCierre;
                                         @endphp
-                                        <div class="font-medium">
-                                            <form action="{{ route('file.download') }}" method="POST">
-                                                @csrf
-                                                <input type="hidden" name="disk" value="proveedores">
-                                                <input type="hidden" name="fileName" value="{{ $fileStorage }}">
-                                                <button type="submit" class="px-3 hover:underline">
-                                                    @if ($nombre)
-                                                        Descargar documento de {{ $nombre }}
-                                                    @else
-                                                        Descargar documento de Apoderado
-                                                    @endif
-                                                </button>
-                                            </form>
-                                        </div>
-                                    @endif
-                                @endforeach
-                                En caso de que exista un nuevo representante o apoderado, por favor, agregue el aval
-                                correspondiente en "Otros Documentos"
-                            </div>
-
-                            <div class="space-y-4">
-                                @php
-                                    $documentosRequeridos = $concurso->documentos_requeridos ?? [];
-                                    if (is_object($documentosRequeridos)) {
-                                        $documentosRequeridos = (array) $documentosRequeridos;
-                                    }
-                                @endphp
-                                @foreach ($documentosRequeridos as $documento_tipo)
-                                    @php
-                                        $nombre = is_object($documento_tipo)
-                                            ? $documento_tipo->nombre
-                                            : $documento_tipo['nombre'];
-                                        $descripcion = is_object($documento_tipo)
-                                            ? $documento_tipo->descripcion
-                                            : $documento_tipo['descripcion'];
-                                        $obligatorio = is_object($documento_tipo)
-                                            ? $documento_tipo->obligatorio
-                                            : $documento_tipo['obligatorio'];
-                                        $tipoDocProveedor = is_object($documento_tipo)
-                                            ? $documento_tipo->tipo_documento_proveedor ?? null
-                                            : $documento_tipo['tipo_documento_proveedor'] ?? null;
-                                        $documentoTipoId = is_object($documento_tipo)
-                                            ? $documento_tipo->id
-                                            : $documento_tipo['id'];
-                                    @endphp
-                                    <div class="bg-white shadow-sm rounded-lg px-4 py-4 border">
-                                        <div class="flex justify-between items-center mb-2">
-                                            <h3 class="font-semibold text-gray-700">
-                                                {{ $nombre }}
-                                                @if ($obligatorio)
-                                                    <span class="text-red-600 text-xs">(Obligatorio)</span>
-                                                @endif
-                                                <p class="font-light text-gray-500 text-sm">{{ $descripcion }}</p>
-                                            </h3>
-                                            @if (
-                                                ($invitacion->intencion == 1 || $invitacion->intencion == 3) &&
-                                                    ($concurso->estado->id == 2 && \Carbon\Carbon::parse($concurso->fecha_cierre)->isFuture()))
-                                                @livewire('concursos.subir-archivo', ['concurso' => $concurso, 'invitacion' => $invitacion, 'documento' => $documento_tipo])
-                                            @endif
-                                        </div>
-
-                                        @if ($tipoDocProveedor)
-                                            @php
-                                                $nombreTipoProveedor = is_object($tipoDocProveedor)
-                                                    ? $tipoDocProveedor->nombre
-                                                    : $tipoDocProveedor['nombre'];
-                                                $tipoProveedorId = is_object($tipoDocProveedor)
-                                                    ? $tipoDocProveedor->id
-                                                    : $tipoDocProveedor['id'];
-
-                                                // ✅ Buscar documento del proveedor
-                                                $proveedorDocumento = null;
-                                                $documentosProveedor = $user->proveedor->documentos ?? [];
-                                                if (is_object($documentosProveedor)) {
-                                                    $documentosProveedor = (array) $documentosProveedor;
-                                                }
-
-                                                foreach ($documentosProveedor as $docProv) {
-                                                    $docTipoId = is_object($docProv)
-                                                        ? $docProv->documento_tipo_id
-                                                        : $docProv['documento_tipo_id'];
-                                                    if ($docTipoId == $tipoProveedorId) {
-                                                        $proveedorDocumento = $docProv;
-                                                        break;
+                                        
+                                        @if ($tiposDocumentosOferta && $tiposDocumentosOferta->count() > 0)
+                                            @foreach ($tiposDocumentosOferta as $index => $tipoDocumentoOferta)
+                                                @php 
+                                                    $tipoDocOfertaObj = is_array($tipoDocumentoOferta) ? (object) $tipoDocumentoOferta : $tipoDocumentoOferta;
+                                                    $documentosOferta = is_array($tipoDocOfertaObj->documentos_oferta ?? null) ? collect($tipoDocOfertaObj->documentos_oferta) : collect($tipoDocOfertaObj->documentos_oferta ?? []);
+                                                    $tipoDocumentoProveedor = is_array($tipoDocOfertaObj->tipo_documento_proveedor ?? null) ? (object) ($tipoDocOfertaObj->tipo_documento_proveedor ?? []) : ($tipoDocOfertaObj->tipo_documento_proveedor ?? null);
+                                                    // Si la invitación es 3, el documento es obligatorio y hay solo un archivo cargado, no se puede eliminar
+                                                    if (
+                                                        isset($invitacionObj->intencion) && $invitacionObj->intencion == 3 &&
+                                                        $tipoDocOfertaObj->obligatorio &&
+                                                        $documentosOferta->count() === 1
+                                                        )
+                                                    {
+                                                        $puedeEliminar = false;
                                                     }
-                                                }
-                                            @endphp
-                                            <div class="text-sm text-gray-600 mb-2">
-                                                Asociado a: {{ $nombreTipoProveedor }}
 
-                                                @if ($proveedorDocumento)
-                                                    @php
-                                                        $vencimiento = is_object($proveedorDocumento)
-                                                            ? $proveedorDocumento->vencimiento ?? null
-                                                            : $proveedorDocumento['vencimiento'] ?? null;
-                                                    @endphp
-                                                    @if ($vencimiento)
-                                                        @if (\Carbon\Carbon::parse($vencimiento)->isPast())
-                                                            <span
-                                                                class="bg-red-400 text-white rounded px-1 ml-1">Vencido</span>
+                                                @endphp
+                                                
+                                                <div class="py-4 {{ $index > 0 ? 'border-t border-gray-200' : '' }}">
+                                                    <div class="flex justify-between items-start mb-3">
+                                                        <div class="flex-1">
+                                                            <h3 class="font-semibold text-gray-800 text-lg">
+                                                                {{ $tipoDocOfertaObj->nombre ?? 'Documento de Oferta' }}
+                                                                @if (isset($tipoDocOfertaObj->obligatorio) && $tipoDocOfertaObj->obligatorio)
+                                                                    <span class="text-red-600 text-sm">(Obligatorio)</span>
+                                                                @endif
+                                                            </h3>
+                                                            
+                                                            @if ($tipoDocOfertaObj->descripcion)
+                                                                <p class="text-gray-600 text-sm mt-1">
+                                                                    {{ $tipoDocOfertaObj->descripcion }}
+                                                                </p>
+                                                            @endif
+                                                        </div>
+                                                        
+                                                        <div class="ml-4">
+                                                            @if ($puedeCargarOferta)
+                                                                @livewire('concursos.subir-archivo', [
+                                                                    'concurso' => $concursoObj, 
+                                                                    'invitacion' => $invitacion, 
+                                                                    'documento' => $tipoDocOfertaObj
+                                                                ], key('subir-archivo-oferta-' . $tipoDocOfertaObj->id))
+                                                            @else
+                                                                <div class="text-gray-400 text-sm">
+                                                                    Carga inactiva
+                                                                </div>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {{-- Información del tipo de documento del proveedor si existe --}}
+                                                    @if ($tipoDocumentoProveedor)
+                                                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-xs">
+                                                            <div class="flex justify-between items-center">
+                                                                <div class="flex-1">
+                                                                    <div class="font-medium text-blue-800">
+                                                                        Documento Asociado: {{ $tipoDocumentoProveedor->nombre ?? 'Sin nombre' }}
+                                                                    </div>
+                                                                    @if (isset($tipoDocumentoProveedor->fecha_vencimiento) && $tipoDocumentoProveedor->fecha_vencimiento)
+                                                                        <div class="text-blue-700 text-xs mt-1">
+                                                                            <span class="font-medium">Vencimiento:</span> 
+                                                                            {{ \Carbon\Carbon::parse($tipoDocumentoProveedor->fecha_vencimiento)->format('d-m-Y') }}
+                                                                            @if (\Carbon\Carbon::parse($concursoObj->fecha_cierre)->greaterThan(\Carbon\Carbon::parse($tipoDocumentoProveedor->fecha_vencimiento)))
+                                                                                <span class="text-red-600 font-medium"> (Vencido al cierre)</span>
+                                                                            @endif
+                                                                        </div>
+                                                                    @endif
+                                                                </div>
+                                                                
+                                                                {{-- Botón de descarga del documento del proveedor --}}
+                                                                @if ($tipoDocumentoProveedor->id)
+                                                                <div class="ml-4">
+                                                                    <form action="{{ route('file.download-proveedor-documento') }}" method="POST" class="inline">
+                                                                        @csrf
+                                                                        <input type="hidden" name="documento_id" value="{{ $tipoDocumentoProveedor->id }}">
+                                                                        <button type="submit" class="text-blue-600 hover:underline text-xs">
+                                                                            Descargar
+                                                                        </button>
+                                                                    </form>
+                                                                </div>
+                                                                @endif
+                                                            </div>
+                                                        </div>
+                                                    @endif
+                                                    
+                                                    {{-- Documentos de oferta ya cargados --}}
+                                                    @if ($documentosOferta->count() > 0)
+                                                        <div class="space-y-2">
+                                                            @foreach ($documentosOferta as $documentoOferta)
+                                                                @php $docOfertaObj = is_array($documentoOferta) ? (object) $documentoOferta : $documentoOferta; @endphp
+                                                                <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                                                                    <div class="flex items-center justify-between">
+                                                                        <div class="flex items-center space-x-2">
+                                                                            <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                                                            </svg>
+                                                                            <div>
+                                                                                <div class="text-sm font-medium text-green-800">
+                                                                                    {{ 
+                                                                                        mb_strlen($docOfertaObj->archivo) > 25 
+                                                                                                ? mb_substr($docOfertaObj->archivo, 0, 22) . '...' 
+                                                                                                : $docOfertaObj->archivo
+                                                                                    }}
+                                                                                </div>
+                                                                                <div class="text-xs text-gray-500">
+                                                                                    {{ \Carbon\Carbon::parse($docOfertaObj->created_at)->format('d-m-Y H:i') }}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="flex items-center space-x-2">
+                                                                            <form action="{{ route('file.download-concurso-documento') }}" method="POST" class="inline">
+                                                                                @csrf
+                                                                                <input type="hidden" name="concurso_id" value="{{ $concursoObj->id }}">
+                                                                                <input type="hidden" name="documento_id" value="{{ $docOfertaObj->media_id }}">
+                                                                                <button type="submit" class="text-blue-600 hover:underline text-xs">Descargar</button>
+                                                                            </form>
+                                                                            @if ($puedeEliminar)
+                                                                                @livewire('concursos.eliminar-archivo', [
+                                                                                    'documento' => $docOfertaObj,
+                                                                                    'concurso' => $concursoObj,
+                                                                                    'invitacion' => $invitacion
+                                                                                ], key('eliminar-archivo-oferta-' . $docOfertaObj->id))
+                                                                            @endif
+                                                                        </div>
+                                                                    </div>
+                                                                    @if (isset($docOfertaObj->comentarios) && $docOfertaObj->comentarios)
+                                                                        <div class="mt-2 text-xs text-gray-600">
+                                                                            <span class="font-medium">Comentarios:</span> {{ $docOfertaObj->comentarios }}
+                                                                        </div>
+                                                                    @endif
+                                                                </div>
+                                                            @endforeach
+                                                        </div>
+                                                    @endif
+
+                                                    @if ($documentosOferta->count() == 0 && $tipoDocumentoProveedor == null)
+                                                        <div class="bg-gray-100 border border-gray-300 rounded-lg p-4 text-gray-600 text-sm text-center">
+                                                            No hay documentos cargados en esta categoría
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                            @endforeach
+                                        
+                                            {{-- Documentos Adicionales --}}
+                                            @php
+                                                $documentosAdicionales = isset($concursoObj->documentos_adicionales) ? collect($concursoObj->documentos_adicionales) : collect([]);
+                                                $documentosProveedor = collect($documentosAdicionales->get('documentos_proveedor', []));
+                                                $documentosEmpresa = collect($documentosAdicionales->get('documentos_empresa', []));
+                                                $totalProveedor = $documentosAdicionales->get('total_proveedor', 0);
+                                                $totalEmpresa = $documentosAdicionales->get('total_empresa', 0);
+                                            @endphp
+                                            
+                                            <div class="py-4 border-t border-gray-200">
+                                                <div class="flex justify-between items-start mb-3">
+                                                    <div class="flex-1">
+                                                        <h3 class="font-semibold text-gray-800 text-lg">
+                                                            Documentos Adicionales
+                                                        </h3>
+                                                        <p class="text-gray-600 text-sm mt-1">
+                                                            Documentos complementarios para su oferta
+                                                        </p>
+                                                    </div>
+                                                    
+                                                    <div class="ml-4">
+                                                        @if ($puedeCargarAdicionales)
+                                                            @livewire('concursos.subir-archivo', [
+                                                                'concurso' => $concursoObj, 
+                                                                'invitacion' => $invitacion, 
+                                                                'documento' => null
+                                                            ], key('subir-archivo-adicional'))
                                                         @else
-                                                            <span
-                                                                class="bg-green-400 text-white rounded px-1 ml-1">Válido</span>
+                                                            <div class="text-gray-400 text-sm">
+                                                                Carga inactiva
+                                                            </div>
                                                         @endif
-                                                    @endif
+                                                    </div>
+                                                </div>
+                                                
+                                                {{-- Documentos del Proveedor --}}
+                                                @if ($documentosProveedor->count() > 0)
+                                                    <div class="mb-4">
+                                                        <h4 class="font-medium text-gray-700 text-sm mb-2">Documentos subidos por usted ({{ $totalProveedor }})</h4>
+                                                        <div class="space-y-2">
+                                                            @foreach ($documentosProveedor as $documentoAdicional)
+                                                                @php $docAdicionalObj = is_array($documentoAdicional) ? (object) $documentoAdicional : $documentoAdicional; @endphp
+                                                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                                                    <div class="flex items-center justify-between">
+                                                                        <div class="flex items-center space-x-2">
+                                                                            <svg class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                                                            </svg>
+                                                                            <div>
+                                                                                <div class="text-sm font-medium text-blue-800">
+                                                                                    {{ 
+                                                                                        mb_strlen($docAdicionalObj->archivo) > 25 
+                                                                                                ? mb_substr($docAdicionalObj->archivo, 0, 22) . '...' 
+                                                                                                : $docAdicionalObj->archivo
+                                                                                    }}
+                                                                                </div>
+                                                                                <div class="text-xs text-gray-500">
+                                                                                    {{ \Carbon\Carbon::parse($docAdicionalObj->created_at)->format('d-m-Y H:i') }}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="flex items-center space-x-2">
+                                                                            <form action="{{ route('file.download-concurso-documento') }}" method="POST" class="inline">
+                                                                                @csrf
+                                                                                <input type="hidden" name="concurso_id" value="{{ $concursoObj->id }}">
+                                                                                <input type="hidden" name="documento_id" value="{{ $docAdicionalObj->media_id }}">
+                                                                                <button type="submit" class="text-blue-600 hover:underline text-xs">Descargar</button>
+                                                                            </form>
+                                                                            @if ($puedeEliminar)
+                                                                                @livewire('concursos.eliminar-archivo', [
+                                                                                    'documento' => $docAdicionalObj,
+                                                                                    'concurso' => $concursoObj,
+                                                                                    'invitacion' => $invitacion
+                                                                                ], key('eliminar-archivo-adicional-' . $docAdicionalObj->id))
+                                                                            @endif
+                                                                        </div>
+                                                                    </div>
+                                                                    @if (isset($docAdicionalObj->comentarios) && $docAdicionalObj->comentarios)
+                                                                        <div class="mt-2 text-xs text-gray-600">
+                                                                            <span class="font-medium">Comentarios:</span> {{ $docAdicionalObj->comentarios }}
+                                                                        </div>
+                                                                    @endif
+                                                                </div>
+                                                            @endforeach
+                                                        </div>
+                                                    </div>
+                                                @endif
+                                                
+                                                {{-- Documentos de la Empresa --}}
+                                                @if ($documentosEmpresa->count() > 0)
+                                                    <div class="mb-4">
+                                                        <h4 class="font-medium text-gray-700 text-sm mb-2">Documentos de la empresa ({{ $totalEmpresa }})</h4>
+                                                        <div class="space-y-2">
+                                                            @foreach ($documentosEmpresa as $documentoEmpresa)
+                                                                @php $docEmpresaObj = is_array($documentoEmpresa) ? (object) $documentoEmpresa : $documentoEmpresa; @endphp
+                                                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                                                    <div class="flex items-center justify-between">
+                                                                        <div class="flex items-center space-x-2">
+                                                                            <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                                                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                                                            </svg>
+                                                                            <div>
+                                                                                <div class="text-sm font-medium text-gray-800">
+                                                                                    {{ 
+                                                                                        mb_strlen($docEmpresaObj->archivo) > 25 
+                                                                                                ? mb_substr($docEmpresaObj->archivo, 0, 22) . '...' 
+                                                                                                : $docEmpresaObj->archivo
+                                                                                    }}
+                                                                                </div>
+                                                                                <div class="text-xs text-gray-500">
+                                                                                    {{ \Carbon\Carbon::parse($docEmpresaObj->created_at)->format('d-m-Y H:i') }}
+                                                                                    @if (isset($docEmpresaObj->creador) && $docEmpresaObj->creador)
+                                                                                        - {{ $docEmpresaObj->creador->name ?? 'Empresa' }}
+                                                                                    @endif
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="flex items-center space-x-2">
+                                                                            <form action="{{ route('file.download-concurso-documento') }}" method="POST" class="inline">
+                                                                                @csrf
+                                                                                <input type="hidden" name="concurso_id" value="{{ $concursoObj->id }}">
+                                                                                <input type="hidden" name="documento_id" value="{{ $docEmpresaObj->media_id }}">
+                                                                                <button type="submit" class="text-blue-600 hover:underline text-xs">Descargar</button>
+                                                                            </form>
+                                                                        </div>
+                                                                    </div>
+                                                                    @if (isset($docEmpresaObj->comentarios) && $docEmpresaObj->comentarios)
+                                                                        <div class="mt-2 text-xs text-gray-600">
+                                                                            <span class="font-medium">Comentarios:</span> {{ $docEmpresaObj->comentarios }}
+                                                                        </div>
+                                                                    @endif
+                                                                </div>
+                                                            @endforeach
+                                                        </div>
+                                                    </div>
+                                                @endif
+                                                
+                                                {{-- Mensaje cuando no hay documentos --}}
+                                                @if ($documentosProveedor->count() == 0 && $documentosEmpresa->count() == 0)
+                                                    <div class="bg-gray-100 border border-gray-300 rounded-lg p-4 text-gray-600 text-sm text-center">
+                                                        No hay documentos adicionales cargados
+                                                    </div>
                                                 @endif
                                             </div>
                                         @endif
-
-                                        @if ($invitacion->intencion > 0)
-                                            <div class="mt-2">
-                                                @php
-                                                    // ✅ Contar documentos de este tipo
-                                                    $documentosInvitacion = $invitacion->documentos ?? [];
-                                                    if (is_object($documentosInvitacion)) {
-                                                        $documentosInvitacion = (array) $documentosInvitacion;
-                                                    }
-
-                                                    $documentosDelTipo = array_filter($documentosInvitacion, function (
-                                                        $doc,
-                                                    ) use ($documentoTipoId) {
-                                                        $docTipoId = is_object($doc)
-                                                            ? $doc->documento_tipo_id
-                                                            : $doc['documento_tipo_id'];
-                                                        return $docTipoId == $documentoTipoId;
-                                                    });
-
-                                                    $hayDocumentos = count($documentosDelTipo) > 0;
-                                                    $hayDocProveedor = $tipoDocProveedor && $proveedorDocumento;
-                                                @endphp
-
-                                                @if (!$hayDocumentos && !$hayDocProveedor)
-                                                    <span
-                                                        class="rounded py-1 px-3 bg-red-500 text-white font-bold text-sm">No
-                                                        cargado</span>
-                                                @endif
-
-                                                @foreach ($documentosDelTipo as $documento)
-                                                    @php
-                                                        $createdAt = is_object($documento)
-                                                            ? $documento->created_at
-                                                            : $documento['created_at'];
-                                                        $fileStorage = is_object($documento)
-                                                            ? $documento->file_storage
-                                                            : $documento['file_storage'];
-                                                    @endphp
-                                                    <div class="flex justify-between items-center border-t py-2 mt-2">
-                                                        <div class="text-sm text-gray-600">
-                                                            Cargado
-                                                            {{ \Carbon\Carbon::parse($createdAt)->format('d-m-Y H:i') }}
-                                                        </div>
-                                                        <div class="flex items-center space-x-2">
-                                                            <form action="{{ route('file.download') }}" method="POST">
-                                                                @csrf
-                                                                <input type="hidden" name="disk"
-                                                                    value="concursos">
-                                                                <input type="hidden" name="fileName"
-                                                                    value="{{ $fileStorage }}">
-                                                                <button type="submit"
-                                                                    class="rounded py-1 px-3 bg-green-500 text-white font-bold text-sm">
-                                                                    Descargar
-                                                                </button>
-                                                            </form>
-                                                            @livewire(
-                                                                'concursos.eliminar-archivo',
-                                                                [
-                                                                    'documento' => $documento,
-                                                                    'concurso' => $concurso,
-                                                                    'invitacion' => $invitacion,
-                                                                ],
-                                                                key(is_object($documento) ? $documento->id : $documento['id'])
-                                                            )
-                                                        </div>
-                                                    </div>
-                                                @endforeach
-                                            </div>
-                                        @endif
-                                    </div>
-                                @endforeach
-
-                                @if ($invitacion->intencion > 0)
-                                    <div class="bg-white shadow-sm rounded-lg p-4 border">
-                                        <div class="flex justify-between items-center mb-2">
-                                            <h3 class="font-semibold text-gray-700">
-                                                Otros Documentos
-                                                <p class="font-light text-gray-500 text-sm">Cualquier otro tipo de
-                                                    documento</p>
-                                            </h3>
-                                            @if (
-                                                ($invitacion->intencion == 1 || $invitacion->intencion == 3) &&
-                                                    ($concurso->estado->id == 2 && \Carbon\Carbon::parse($concurso->fecha_cierre)->isFuture()))
-                                                @livewire('concursos.subir-archivo', ['concurso' => $concurso, 'invitacion' => $invitacion])
+                                    @else 
+                                        @foreach ($concursoObj->tipos_documentos_oferta as $tipoDocumentoOferta)
+                                        <div class="flex items-center space-x-2 py-2 border-b last:border-b-0">
+                                            <span class="font-medium text-gray-800">
+                                                {{ $tipoDocumentoOferta['nombre'] ?? 'Documento de Oferta' }}
+                                            </span>
+                                            @if(isset($tipoDocumentoOferta['obligatorio']) && $tipoDocumentoOferta['obligatorio'])
+                                                <span class="text-red-600 text-xs font-semibold">(Obligatorio)</span>
                                             @endif
                                         </div>
-                                        <div class="mt-2">
-                                            @php
-                                                $documentosSinTipo = array_filter($documentosInvitacion, function (
-                                                    $doc,
-                                                ) {
-                                                    $docTipoId = is_object($doc)
-                                                        ? $doc->documento_tipo_id ?? null
-                                                        : $doc['documento_tipo_id'] ?? null;
-                                                    $createdAt = is_object($doc)
-                                                        ? $doc->created_at
-                                                        : $doc['created_at'];
-                                                    return !$docTipoId &&
-                                                        \Carbon\Carbon::parse($createdAt)->lte(
-                                                            \Carbon\Carbon::parse($concurso->fecha_cierre),
-                                                        );
-                                                });
-                                            @endphp
-                                            @foreach ($documentosSinTipo as $documento)
-                                                @php
-                                                    $createdAt = is_object($documento)
-                                                        ? $documento->created_at
-                                                        : $documento['created_at'];
-                                                    $fileStorage = is_object($documento)
-                                                        ? $documento->file_storage
-                                                        : $documento['file_storage'];
-                                                @endphp
-                                                <div class="flex justify-between items-center border-t py-2 mt-2">
-                                                    <div class="text-sm text-gray-600">
-                                                        Cargado
-                                                        {{ \Carbon\Carbon::parse($createdAt)->format('d-m-Y H:i') }}
-                                                    </div>
-                                                    <div class="flex items-center space-x-2">
-                                                        <form action="{{ route('file.download') }}" method="POST">
-                                                            @csrf
-                                                            <input type="hidden" name="disk" value="concursos">
-                                                            <input type="hidden" name="fileName"
-                                                                value="{{ $fileStorage }}">
-                                                            <button type="submit"
-                                                                class="rounded py-1 px-3 bg-green-500 text-white font-bold text-sm">
-                                                                Descargar
-                                                            </button>
-                                                        </form>
-                                                        @livewire(
-                                                            'concursos.eliminar-archivo',
-                                                            [
-                                                                'documento' => $documento,
-                                                                'concurso' => $concurso,
-                                                                'invitacion' => $invitacion,
-                                                            ],
-                                                            key(is_object($documento) ? $documento->id : $documento['id'])
-                                                        )
-                                                    </div>
-                                                </div>
-                                            @endforeach
-                                        </div>
-                                    </div>
-                                @endif
-
-                                @if ($invitacion->intencion == 3 && $concurso->estado->id > 2)
-                                    <div class="bg-white shadow-sm rounded-lg p-4 border mt-4">
-                                        <div class="flex justify-between items-center mb-2">
-                                            <h3 class="font-semibold text-gray-700">
-                                                Documentos Post-Apertura
-                                                <p class="font-light text-gray-500 text-sm">Documentos cargados en
-                                                    etapa de análisis</p>
-                                            </h3>
-                                            @if ($invitacion->concurso->estado->id == 3 && ($concurso->permite_carga ?? false))
-                                                @livewire('concursos.subir-archivo', ['concurso' => $concurso, 'invitacion' => $invitacion])
-                                            @endif
-                                        </div>
-                                        <div class="mt-2">
-                                            @php
-                                                $documentosPostConcurso = array_filter($documentosInvitacion, function (
-                                                    $doc,
-                                                ) use ($concurso) {
-                                                    $docTipoId = is_object($doc)
-                                                        ? $doc->documento_tipo_id ?? null
-                                                        : $doc['documento_tipo_id'] ?? null;
-                                                    $createdAt = is_object($doc)
-                                                        ? $doc->created_at
-                                                        : $doc['created_at'];
-                                                    return !$docTipoId &&
-                                                        \Carbon\Carbon::parse($createdAt)->gt(
-                                                            \Carbon\Carbon::parse($concurso->fecha_cierre),
-                                                        );
-                                                });
-                                            @endphp
-                                            @foreach ($documentosPostConcurso as $documento)
-                                                @php
-                                                    $createdAt = is_object($documento)
-                                                        ? $documento->created_at
-                                                        : $documento['created_at'];
-                                                    $fileStorage = is_object($documento)
-                                                        ? $documento->file_storage
-                                                        : $documento['file_storage'];
-                                                    $userIdCreated = is_object($documento)
-                                                        ? $documento->user_id_created ?? null
-                                                        : $documento['user_id_created'] ?? null;
-                                                @endphp
-                                                <div class="flex justify-between items-center border-t py-2 mt-2">
-                                                    <div class="text-sm text-gray-600">
-                                                        Cargado
-                                                        {{ \Carbon\Carbon::parse($createdAt)->format('d-m-Y H:i') }}
-                                                        @if ($userIdCreated)
-                                                            <span
-                                                                class="bg-yellow-100 text-yellow-800 text-xs font-medium ml-2 px-2 py-0.5 rounded">BAESA</span>
-                                                        @endif
-                                                    </div>
-                                                    <div class="flex items-center space-x-2">
-                                                        <form action="{{ route('file.download') }}" method="POST">
-                                                            @csrf
-                                                            <input type="hidden" name="disk" value="concursos">
-                                                            <input type="hidden" name="fileName"
-                                                                value="{{ $fileStorage }}">
-                                                            <button type="submit"
-                                                                class="rounded py-1 px-3 bg-green-500 text-white font-bold text-sm">
-                                                                Descargar
-                                                            </button>
-                                                        </form>
-                                                        @livewire(
-                                                            'concursos.eliminar-archivo',
-                                                            [
-                                                                'documento' => $documento,
-                                                                'concurso' => $concurso,
-                                                                'invitacion' => $invitacion,
-                                                            ],
-                                                            key(is_object($documento) ? $documento->id : $documento['id'])
-                                                        )
-                                                    </div>
-                                                </div>
-                                            @endforeach
-                                        </div>
-                                    </div>
-                                @endif
-                            </div>
+                                        @endforeach
+                                    @endif
+                                </div>
+                            @else
+                                <div class="text-gray-500 italic">No hay documentación requerida definida</div>
+                            @endif
                         </div>
                     </div>
-
-                    <div class="flex justify-end mt-4">
-                        @livewire('concursos.action-modal', ['concurso' => $concurso, 'invitacion' => $invitacion])
+                    <div class="flex justify-end">
+                        @if($invitacion)
+                            @livewire('concursos.action-modal', ['concurso' => $concursoObj, 'invitacion' => $invitacion], key('action-modal-' . $concursoObj->id))
+                        @endif
                     </div>
                 </div>
             </div>
+            
         </div>
     </div>
 </x-app-layout>

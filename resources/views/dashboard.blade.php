@@ -58,42 +58,126 @@
                             @if ($documentos->count() == 0)
                                 <div class="text-gray-500 italic">No existen documentos asociados al proveedor</div>
                             @else
-                                @php $td_id = 0; @endphp
                                 @foreach ($documentos as $documento)
                                     @php
                                         $doc = is_array($documento) ? (object) $documento : $documento;
-                                        $docTipo = is_array($doc->documento_tipo ?? null)
-                                            ? (object) $doc->documento_tipo
-                                            : $doc->documento_tipo ?? null;
                                     @endphp
-                                    @if ($docTipo && $docTipo->id != $td_id)
-                                        <div class="bg-white shadow rounded-lg p-4 mb-2">
-                                            <div class="flex justify-between items-center">
-                                                <span class="font-semibold text-gray-700">{{ $docTipo->nombre }}</span>
-                                                <div class="flex space-x-2">
-                                                    <form action="{{ route('file.download') }}" method="POST">
-                                                        @csrf
-                                                        <input type="hidden" name="disk" value="proveedores">
-                                                        <input type="hidden" name="fileName"
-                                                            value="{{ $doc->file_storage }}">
-                                                        <button type="submit"
-                                                            class="text-blue-600 hover:text-blue-800 text-sm">Descargar</button>
-                                                    </form>
-                                                </div>
+                                    <div class="bg-white shadow rounded-lg p-4 mb-2">
+                                        <div class="flex justify-between items-center">
+                                            <div class="flex-1">
+                                                <span class="font-semibold text-gray-700">{{ $doc->nombre }}</span>
+                                                @if ($doc->vencimiento)
+                                                    <div class="text-sm text-gray-500 mt-1">
+                                                        Vencimiento:
+                                                        {{ \Carbon\Carbon::parse($doc->vencimiento)->format('d/m/Y') }}
+                                                        @if (\Carbon\Carbon::parse($doc->vencimiento)->isPast())
+                                                            <span class="text-red-600 font-medium">(Vencido)</span>
+                                                        @elseif (\Carbon\Carbon::parse($doc->vencimiento)->diffInDays(now()) <= 30)
+                                                            <span class="text-orange-600 font-medium">(Por
+                                                                vencer)</span>
+                                                        @endif
+                                                    </div>
+                                                @endif
+                                            </div>
+                                            <div class="flex space-x-2">
+                                                <form action="{{ route('file.download-proveedor-documento') }}"
+                                                    method="POST">
+                                                    @csrf
+                                                    <input type="hidden" name="documento_id"
+                                                        value="{{ $doc->id }}">
+                                                    <button type="submit"
+                                                        class="text-blue-600 hover:text-blue-800 text-sm">Descargar</button>
+                                                </form>
                                             </div>
                                         </div>
-                                        @php $td_id = $docTipo->id; @endphp
-                                    @endif
+                                    </div>
                                 @endforeach
                             @endif
                         </div>
+
+
+                        {{-- ✅ APODERADOS - Compatible con datos de API --}}
+                        <div class="p-6 bg-gray-100 border-t mt-6">
+                            <h2 class="text-xl mb-4 text-gray-700 flex justify-between items-center">
+                                <div class="font-semibold">Representantes Legales/Apoderados</div>
+                                <div>
+                                    @livewire('subir-archivo-apoderado', ['proveedor_id' => $proveedor->id])
+                                </div>
+                            </h2>
+
+                            @php
+                                $apoderados = is_array($proveedor->apoderados)
+                                    ? collect($proveedor->apoderados)
+                                    : collect($proveedor->apoderados ?? []);
+                            @endphp
+
+                            @if ($apoderados->count() == 0)
+                                <div class="text-gray-500 italic">No existen apoderados asociados al proveedor</div>
+                            @else
+                                @php
+                                    $apoderadosCollection = $apoderados->map(fn($a) => is_array($a) ? (object) $a : $a);
+                                    $representantes = $apoderadosCollection->where('tipo', 'representante')->values();
+                                    $apoderadosSimples = $apoderadosCollection->where('tipo', 'apoderado')->values();
+                                @endphp
+
+                                {{-- Representantes Legales --}}
+                                @if ($representantes->count())
+                                    <div class="mb-4">
+                                        <div class="font-bold text-gray-700 mb-2">Representantes Legales</div>
+                                        @foreach ($representantes as $rep)
+                                            <div
+                                                class="bg-white shadow rounded-lg p-4 mb-2 flex justify-between items-center">
+                                                <div>
+                                                    <span
+                                                        class="font-semibold">{{ $rep->nombre ?? 'Sin nombre' }}</span>
+                                                </div>
+                                                <form action="{{ route('file.download-proveedor-documento') }}"
+                                                    method="POST">
+                                                    @csrf
+                                                    <input type="hidden" name="documento_id"
+                                                        value="{{ $rep->id }}">
+                                                    <button type="submit"
+                                                        class="text-blue-600 hover:text-blue-800 text-sm">Descargar</button>
+                                                </form>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
+
+                                {{-- Apoderados --}}
+                                @if ($apoderadosSimples->count())
+                                    <div>
+                                        <div class="font-bold text-gray-700 mb-2">Apoderados</div>
+                                        @foreach ($apoderadosSimples as $apo)
+                                            <div
+                                                class="bg-white shadow rounded-lg p-4 mb-2 flex justify-between items-center">
+                                                <div>
+                                                    <span class="font-semibold">Apoderado</span>
+                                                </div>
+                                                <form action="{{ route('file.download-proveedor-documento') }}"
+                                                    method="POST">
+                                                    @csrf
+                                                    <input type="hidden" name="documento_id"
+                                                        value="{{ $apo->id }}">
+                                                    <button type="submit"
+                                                        class="text-blue-600 hover:text-blue-800 text-sm">Descargar</button>
+                                                </form>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="col">
                         {{-- ✅ CONTACTOS - Compatible con datos de API --}}
                         @php
                             $contactos = is_array($proveedor->contactos)
                                 ? collect($proveedor->contactos)
                                 : collect($proveedor->contactos ?? []);
                         @endphp
-    
+
                         @if ($contactos->count() > 0)
                             <div class="subtitulo-show">
                                 Contactos
@@ -125,14 +209,14 @@
                             @endforeach
                             <div class="pt-4">&nbsp;</div>
                         @endif
-    
+
                         {{-- ✅ DIRECCIONES - Compatible con datos de API --}}
                         @php
                             $direcciones = is_array($proveedor->direcciones)
                                 ? collect($proveedor->direcciones)
                                 : collect($proveedor->direcciones ?? []);
                         @endphp
-    
+
                         @if ($direcciones->count() > 0)
                             <div class="subtitulo-show">
                                 Direcciones
@@ -165,65 +249,6 @@
                             @endforeach
                             <div class="pt-4">&nbsp;</div>
                         @endif
-    
-                        {{-- ✅ APODERADOS - Compatible con datos de API --}}
-                        <div class="p-6 bg-gray-100 border-t mt-6">
-                            <h2 class="text-xl mb-4 text-gray-700 flex justify-between items-center">
-                                <div class="font-semibold">Representantes Legales/Apoderados</div>
-                                <div>
-                                    @livewire('subir-archivo-apoderado', ['proveedor_id' => $proveedor->id])
-                                </div>
-                            </h2>
-    
-                            @php
-                                $apoderados = is_array($proveedor->apoderados)
-                                    ? collect($proveedor->apoderados)
-                                    : collect($proveedor->apoderados ?? []);
-                            @endphp
-    
-                            @if ($apoderados->count() == 0)
-                                <div class="text-gray-500 italic">No existen apoderados asociados al proveedor</div>
-                            @else
-                                @foreach ($apoderados as $apoderado)
-                                    @php
-                                        $apo = is_array($apoderado) ? (object) $apoderado : $apoderado;
-                                        $documentosApo = is_array($apo->documentos ?? [])
-                                            ? collect($apo->documentos)
-                                            : collect($apo->documentos ?? []);
-                                    @endphp
-                                    @if ($documentosApo->count() > 0)
-                                        <div class="bg-white shadow rounded-lg p-4 mb-2">
-                                            @foreach ($documentosApo as $documento)
-                                                @php $doc = is_array($documento) ? (object) $documento : $documento; @endphp
-                                                <div
-                                                    class="flex justify-between items-center border-b last:border-b-0">
-                                                    <span class="font-semibold text-gray-t00">
-                                                        {{ ucfirst($apo->tipo) }}
-                                                        @if ($apo->nombre)
-                                                            - {{ $apo->nombre }}
-                                                        @endif
-                                                    </span>
-                                                    <div class="flex space-x-2">
-                                                        <form action="{{ route('file.download') }}" method="POST">
-                                                            @csrf
-                                                            <input type="hidden" name="disk" value="proveedores">
-                                                            <input type="hidden" name="fileName"
-                                                                value="{{ $doc->file_storage }}">
-                                                            <button type="submit"
-                                                                class="text-blue-600 hover:text-blue-800 text-sm">Descargar</button>
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            @endforeach
-                                        </div>
-                                    @endif
-                                @endforeach
-                            @endif
-                        </div>
-                    </div>
-
-                    <div class="col">
-
                         {{-- ✅ RUBROS - Compatible con datos de API --}}
                         @livewire('rubros-edit', ['proveedor' => $proveedor], key($proveedor->id . microtime(true)))
                     </div>

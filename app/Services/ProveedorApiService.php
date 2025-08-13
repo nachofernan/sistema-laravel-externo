@@ -138,4 +138,62 @@ class ProveedorApiService
         $url = "{$this->apiUrl}/api/proveedores/{$this->cuit}/documentos/{$documentoId}/descargar";
         return Http::withToken($this->token)->get($url);
     }
+
+    /**
+     * Descargar documento y manejar la respuesta
+     */
+    public function descargarDocumentoResponse(int $documentoId)
+    {
+        $response = $this->descargarDocumento($documentoId);
+        if ($response->successful()) {
+            // Obtener el nombre del archivo del header Content-Disposition
+            $contentDisposition = $response->header('Content-Disposition');
+            $filename = 'documento.pdf'; // Default
+            
+            if ($contentDisposition) {
+                if (preg_match('/filename="([^"]+)"/', $contentDisposition, $matches)) {
+                    $filename = $matches[1];
+                } elseif (preg_match('/filename=([^;]+)/', $contentDisposition, $matches)) {
+                    $filename = $matches[1];
+                }
+            }
+            
+            return response($response->body())
+                ->header('Content-Type', $response->header('Content-Type', 'application/octet-stream'))
+                ->header('Content-Disposition', "attachment; filename=\"{$filename}\"")
+                ->header('Content-Length', strlen($response->body()));
+        }
+        
+        // Si hay error, devolver respuesta de error
+        $errorData = $response->json();
+        $message = $errorData['message'] ?? 'Error al descargar el documento';
+        $status = $response->status();
+        
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'status' => $status
+        ], $status);
+    }
+
+    /**
+     * Subir apoderado
+     */
+    public function subirApoderado(UploadedFile $file, string $tipo, ?string $nombre = null, ?string $vencimiento = null): ?object
+    {
+        $response = Http::withToken($this->token)
+            ->attach('file', file_get_contents($file->getPathname()), $file->getClientOriginalName())
+            ->post("{$this->apiUrl}/api/proveedores/{$this->cuit}/apoderados", [
+                'tipo' => $tipo,
+                'nombre' => $nombre,
+                'vencimiento' => $vencimiento,
+            ]);
+
+        if ($response->successful()) {
+            return (object) ($response->json('data') ?? []);
+        }
+        
+        Log::error('API: Error al subir apoderado', ['status' => $response->status(), 'body' => $response->body()]);
+        return null;
+    }
 } 

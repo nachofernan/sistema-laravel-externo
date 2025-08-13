@@ -29,7 +29,7 @@ class ProveedorController extends Controller
             $proveedor = $api->getProveedor();
     
             if (!$proveedor) {
-                \Log::error('Dashboard: No se pudo obtener datos del proveedor', [
+                Log::error('Dashboard: No se pudo obtener datos del proveedor', [
                     'user_id' => $user->id,
                     'cuit' => $user->username,
                     'jwt_token' => $token,
@@ -42,7 +42,7 @@ class ProveedorController extends Controller
     
             return view('dashboard', compact('proveedor'));
         } catch (\Exception $e) {
-            \Log::error('Dashboard exception', [
+            Log::error('Dashboard exception', [
                 'user_id' => Auth::id(),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),

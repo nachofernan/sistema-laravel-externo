@@ -105,6 +105,7 @@ Route::middleware([
     // Concursos
     Route::get('/concursos', [ConcursoController::class, 'index'])->name('concursos.index');
     Route::get('/concursos/{id}', [ConcursoController::class, 'show'])->name('concursos.show');
+    Route::patch('/concursos/{id}/intencion', [ConcursoController::class, 'cambiarIntencion'])->name('concursos.intencion');
     
     // Logout
     Route::post('/logout', [CustomLoginController::class, 'logout'])
@@ -117,7 +118,7 @@ Route::middleware([
     // === GESTIÓN DE ARCHIVOS ===
     Route::prefix('files')->name('file.')->group(function () {
         // Subida de archivos
-        Route::post('/upload/{invitacion}', [FileController::class, 'uploadFileToPlataforma'])
+        Route::post('/upload/{concurso}', [FileController::class, 'uploadFileToPlataforma'])
             ->name('upload');
         Route::post('/upload-apoderado', [FileController::class, 'uploadDocumentacionApoderado'])
             ->name('uploadDocumentacionApoderado');
@@ -125,8 +126,18 @@ Route::middleware([
         // Descarga y eliminación
         Route::post('/download', [FileController::class, 'downloadFileFromPlataforma'])
             ->name('download');
+        Route::post('/download-proveedor-documento', [FileController::class, 'downloadProveedorDocumento'])
+            ->name('download-proveedor-documento');
+        Route::post('/download-concurso-documento', [FileController::class, 'downloadConcursoDocumento'])
+            ->name('download-concurso-documento');
         Route::post('/delete', [FileController::class, 'deleteFileFromPlataforma'])
             ->name('delete');
+        
+        // API de concursos
+        Route::get('/concursos/{concurso}/documentos', [FileController::class, 'getDocumentosInvitacion'])
+            ->name('concursos.documentos');
+        Route::get('/concursos/{concurso}/documentos/{documentoTipo}/verificar', [FileController::class, 'verificarDocumentoProveedor'])
+            ->name('concursos.verificar-documento');
     });
 
     // === GESTIÓN DE INVITACIONES ===

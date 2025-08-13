@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use App\Services\ConcursosApiService;
 
 class DataRequestController extends Controller
 {
@@ -17,170 +18,97 @@ class DataRequestController extends Controller
         $this->authController = $authController;
     }
 
+    /**
+     * Cambiar intención de participación usando la API de concursos
+     */
     public function editarInvitacion(Request $request)
     {
         // ✅ Validación robusta
         $validated = $request->validate([
-            'invitacion' => 'required|integer',
-            'intencion' => 'required|integer' // Solo valores permitidos
+            'concurso_id' => 'required|integer|min:1',
+            'intencion' => 'required|integer|in:0,1,2,3' // Solo valores permitidos
         ]);
 
         try {
-            $token = $this->authController->getNewToken();
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new ConcursosApiService($token, $user->username);
             
-            $response = Http::timeout(15)
-                ->withToken($token)
-                ->post($this->getApiUrl() . '/invitacion', [
-                    'invitacion' => $validated['invitacion'],
-                    'intencion' => $validated['intencion'],
+            $success = $api->cambiarIntencion($validated['concurso_id'], $validated['intencion']);
+
+            if ($success) {
+                Log::info('Invitation updated successfully', [
+                    'user_id' => Auth::id(),
+                    'concurso_id' => $validated['concurso_id'],
+                    'new_intencion' => $validated['intencion']
                 ]);
 
-            if (!$response->successful()) {
+                return redirect()->route('concursos.show', $validated['concurso_id'])
+                    ->with('success', 'Invitación actualizada correctamente.');
+            } else {
                 Log::error('Invitation edit failed', [
                     'user_id' => Auth::id(),
-                    'invitacion_id' => $validated['invitacion'],
-                    'status' => $response->status()
+                    'concurso_id' => $validated['concurso_id'],
+                    'intencion' => $validated['intencion']
                 ]);
                 
-                return back()->with('error', 'Error al actualizar la invitación. Intente nuevamente.');
+                return redirect()->route('concursos.show', $validated['concurso_id'])
+                    ->with('error', 'Error al actualizar la invitación. Intente nuevamente.');
             }
-
-            $invitacion = Invitacion::find($validated['invitacion']);
-            
-            Log::info('Invitation updated successfully', [
-                'user_id' => Auth::id(),
-                'invitacion_id' => $validated['invitacion'],
-                'new_intencion' => $validated['intencion']
-            ]);
-
-            return redirect()->route('concursos.show', $invitacion->concurso->id)
-                ->with('success', 'Invitación actualizada correctamente.');
 
         } catch (\Exception $e) {
             Log::error('Invitation edit exception', [
                 'user_id' => Auth::id(),
-                'invitacion_id' => $validated['invitacion'] ?? 'unknown',
-                'error' => $e->getMessage()
+                'concurso_id' => $validated['concurso_id'] ?? 'unknown',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
             
-            return back()->with('error', 'Error temporal del sistema. Intente nuevamente.');
+            return redirect()->route('concursos.show', $validated['concurso_id'] ?? 1)
+                ->with('error', 'Error temporal del sistema. Intente nuevamente.');
         }
     }
 
+    /**
+     * Bajar oferta (marcar como no participa)
+     */
     public function bajarOferta(Request $request)
     {
-        // ✅ Validación más estricta
         $validated = $request->validate([
-            'invitacion' => 'required|integer',
-            'intencion' => 'required|integer', // Solo valor 1 permitido
-            'password' => 'required|string' // Validar contraseña
+            'concurso_id' => 'required|integer|min:1',
         ]);
 
         try {
-            // ✅ Verificar contraseña del usuario actual
-            if (!\Illuminate\Support\Facades\Hash::check($validated['password'], Auth::user()->password)) {
-                Log::warning('Invalid password attempt for offer withdrawal', [
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new ConcursosApiService($token, $user->username);
+            
+            // Marcar como no participa (intencion = 2)
+            $success = $api->cambiarIntencion($validated['concurso_id'], 2);
+
+            if ($success) {
+                Log::info('Oferta bajada successfully', [
                     'user_id' => Auth::id(),
-                    'invitacion_id' => $validated['invitacion']
-                ]);
-                
-                return back()->with('error', 'Contraseña incorrecta.');
-            }
-
-            $invitacion = Invitacion::with('documentos')->find($validated['invitacion']);
-
-            if (!$invitacion) {
-                return back()->with('error', 'Invitación no encontrada.');
-            }
-
-            // ✅ Verificar que el usuario puede editar esta invitación
-            if ($invitacion->proveedor_id !== Auth::user()->proveedor->id) {
-                Log::warning('Unauthorized offer withdrawal attempt', [
-                    'user_id' => Auth::id(),
-                    'invitacion_id' => $validated['invitacion']
-                ]);
-                
-                return back()->with('error', 'No tiene permisos para esta acción.');
-            }
-
-            $token = $this->authController->getNewToken();
-
-            // Eliminar archivos de la plataforma
-            foreach ($invitacion->documentos as $documento) {
-                try {
-                    $response = Http::timeout(15)
-                        ->withToken($token)
-                        ->get($this->getApiUrl() . '/delete', [
-                            'filename' => $documento->file_storage,
-                            'disk' => 'concursos'
-                        ]);
-                    
-                    // ✅ Log individual de cada eliminación
-                    if (!$response->successful()) {
-                        Log::warning('Document deletion failed during offer withdrawal', [
-                            'user_id' => Auth::id(),
-                            'document_id' => $documento->id,
-                            'status' => $response->status()
-                        ]);
-                    }
-                    
-                } catch (\Exception $e) {
-                    Log::error('Document deletion exception during offer withdrawal', [
-                        'user_id' => Auth::id(),
-                        'document_id' => $documento->id,
-                        'error' => $e->getMessage()
-                    ]);
-                    // Continuar con otros archivos en caso de error
-                }
-            }
-
-            // Restablecer la invitación
-            $response = Http::timeout(15)
-                ->withToken($token)
-                ->post($this->getApiUrl() . '/invitacion', [
-                    'invitacion' => $invitacion->id,
-                    'intencion' => 1,
+                    'concurso_id' => $validated['concurso_id']
                 ]);
 
-            if (!$response->successful()) {
-                Log::error('Invitation reset failed during offer withdrawal', [
-                    'user_id' => Auth::id(),
-                    'invitacion_id' => $invitacion->id,
-                    'status' => $response->status()
-                ]);
-                
-                return back()->with('error', 'Error al procesar la baja de oferta. Contacte al administrador.');
+                return redirect()->route('concursos.show', $validated['concurso_id'])
+                    ->with('success', 'Oferta bajada correctamente.');
+            } else {
+                return redirect()->route('concursos.show', $validated['concurso_id'])
+                    ->with('error', 'Error al bajar la oferta. Intente nuevamente.');
             }
-
-            Log::info('Offer withdrawn successfully', [
-                'user_id' => Auth::id(),
-                'invitacion_id' => $invitacion->id,
-                'documents_count' => $invitacion->documentos->count()
-            ]);
-
-            return back()->with('success', 'Oferta dada de baja correctamente.');
 
         } catch (\Exception $e) {
-            Log::error('Offer withdrawal exception', [
+            Log::error('Bajar oferta exception', [
                 'user_id' => Auth::id(),
-                'invitacion_id' => $validated['invitacion'] ?? 'unknown',
-                'error' => $e->getMessage()
+                'concurso_id' => $validated['concurso_id'] ?? 'unknown',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
             
-            return back()->with('error', 'Error temporal del sistema. Intente nuevamente.');
+            return redirect()->route('concursos.show', $validated['concurso_id'] ?? 1)
+                ->with('error', 'Error temporal del sistema. Intente nuevamente.');
         }
-    }
-
-    // ✅ URL centralizada
-    private function getApiUrl(): string
-    {
-        $url = env('PLATAFORMA_API_URL');
-        
-        if (empty($url)) {
-            Log::critical('PLATAFORMA_API_URL not configured');
-            throw new \Exception('Configuración del sistema incompleta');
-        }
-
-        return rtrim($url, '/');
     }
 }

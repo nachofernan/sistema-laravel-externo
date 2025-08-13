@@ -2,44 +2,54 @@
 
 namespace App\Livewire;
 
-use App\Http\Controllers\AuthController;
+use App\Services\ProveedorApiService;
+use Livewire\WithFileUploads;
 use Livewire\Component;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
 
 class SubirArchivoApoderado extends Component
 {
+    use WithFileUploads;
+
     public $open = false;
     public $proveedor_id;
     public $tipo = 'apoderado';
-    public $documentos = [];
+    public $nombre;
     public $vencimiento;
+    public $file;
+    public $successMessage = null;
+    public $errorMessage = null;
 
-    public function mount($proveedor_id) 
+    public function mount($proveedor_id)
     {
         $this->proveedor_id = $proveedor_id;
     }
 
-    /**
-     * ✅ Crear instancia fresca del AuthController en cada uso
-     */
-    private function getAuthController()
+    public function submit()
     {
-        return new AuthController();
+        $this->validate([
+            'file' => 'required|file|mimes:pdf|max:5120',
+            'tipo' => 'required|in:apoderado,representante',
+            'nombre' => $this->tipo === 'representante' ? 'required' : 'nullable',
+            'vencimiento' => 'nullable|date',
+        ]);
+
+        $api = new ProveedorApiService();
+        $result = $api->subirApoderado($this->file, $this->tipo, $this->nombre, $this->vencimiento);
+
+        if ($result) {
+            $this->successMessage = 'Apoderado subido correctamente. Pendiente de validación.';
+            $this->reset(['file', 'tipo', 'nombre', 'vencimiento', 'open']);
+            $this->dispatch('apoderado-subido');
+        } else {
+            $this->errorMessage = 'Error al subir el apoderado. Intente nuevamente.';
+        }
     }
 
     public function render()
     {
-        return view('livewire.subir-archivo-apoderado');
-    }
-
-    /**
-     * ✅ Método centralizado para URL de API
-     */
-    private function getApiUrl(): string
-    {
-        $url = env('PLATAFORMA_API_URL');
-        return rtrim($url, '/');
+        return view('livewire.subir-archivo-apoderado', [
+            'successMessage' => $this->successMessage,
+            'errorMessage' => $this->errorMessage,
+        ]);
     }
 }

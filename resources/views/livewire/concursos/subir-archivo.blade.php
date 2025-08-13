@@ -1,11 +1,7 @@
 <div>
-    {{-- Do your work, then step back. --}}
-    {{-- <button class="boton-celeste text-sm w-full" > 
-        Cargar Nueva Documentación
-    </button> --}}
     <button wire:click="$set('open', true)" class="rounded py-1 px-3 text-blue-500 hover:underline text-sm">Cargar</button>
+    
     <x-dialog-modal wire:model="open"> 
-        <div class="max-w-10xl">
         <x-slot name="title"> 
             <div class="flex justify-between items-center p-4 border-b">
                 <h2 class="text-xl font-semibold text-gray-800">Cargar: <span>{{$documento->nombre}}</span></h2>
@@ -16,21 +12,17 @@
                 </button>
             </div>
         </x-slot> 
+        
         <x-slot name="content">
             <div class="px-6">
-                <form 
-                    action="{{ route('file.upload', is_object($invitacion) ? $invitacion->id : $invitacion['id']) }}" 
-                    method="POST" 
-                    enctype="multipart/form-data"
-                    class="space-y-4"
-                >
-                    @csrf
-                    <input type="hidden" name="documento_tipo_id" value="{{is_object($documento) ? $documento->id : $documento['id']}}">
-                    
+                <form wire:submit.prevent="submit" enctype="multipart/form-data" class="space-y-4">
                     <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Seleccionar archivo PDF
+                        </label>
                         <input 
                             type="file" 
-                            name="file" 
+                            wire:model="file" 
                             required
                             accept=".pdf"
                             class="block w-full text-sm text-gray-500
@@ -41,19 +33,58 @@
                                 hover:file:bg-cyan-100
                                 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                         >
+                        @error('file') 
+                            <span class="text-red-500 text-sm">{{ $message }}</span>
+                        @enderror
                     </div>
+
+                    @if ($esDocumentoAdicional)
+                        <div class="hidden">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Comentarios (opcional)
+                            </label>
+                            <textarea 
+                                wire:model="comentarios" 
+                                rows="3"
+                                placeholder="Agregue comentarios sobre este documento adicional..."
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm"
+                            ></textarea>
+                            @error('comentarios') 
+                                <span class="text-red-500 text-sm">{{ $message }}</span>
+                            @enderror
+                        </div>
+                    @endif
     
                     <button 
                         type="submit" 
                         class="w-full bg-cyan-500 text-white py-2 rounded-lg hover:bg-cyan-600 transition-colors duration-300"
+                        wire:loading.attr="disabled"
+                        wire:loading.class="opacity-50"
                     >
-                        Subir Archivo
+                        <span wire:loading.remove>Subir Archivo</span>
+                        <span wire:loading>Subiendo...</span>
                     </button>
                 </form>
+
+                @if ($successMessage)
+                    <div class="bg-green-50 border-l-4 border-green-400 p-4 mt-6 text-green-900 text-sm rounded">
+                        {{ $successMessage }}
+                    </div>
+                @endif
+
+                @if ($errorMessage)
+                    <div class="bg-red-50 border-l-4 border-red-400 p-4 mt-6 text-red-900 text-sm rounded">
+                        {{ $errorMessage }}
+                    </div>
+                @endif
+
+                <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mt-6 text-blue-900 text-sm rounded">
+                    <strong>Información:</strong> El archivo será procesado y validado por el sistema. Asegúrese de que el documento sea legible y esté en formato PDF.
+                </div>
             </div>
         </x-slot> 
+        
         <x-slot name="footer">
         </x-slot> 
-        </div>
     </x-dialog-modal> 
 </div>

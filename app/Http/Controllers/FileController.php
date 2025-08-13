@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use App\Services\ConcursosApiService;
 
 class FileController extends Controller
 {
@@ -20,14 +21,21 @@ class FileController extends Controller
         $this->authController = $authController;
     }
 
-    public function uploadFileToPlataforma(Request $request, Invitacion $invitacion)
+    /**
+     * Subir documento de concurso usando la API de concursos
+     */
+    public function uploadFileToPlataforma(Request $request, int $concursoId)
     {
         // ✅ Validación centralizada y robusta
         $this->validateUploadFile($request);
 
         try {
-            $token = $this->authController->getNewToken();
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new ConcursosApiService($token, $user->username);
+            
             $file = $request->file('file');
+            $documentoTipoId = $request->input('documento_tipo_id');
             
             // ✅ Sanitizar nombre del archivo
             $sanitizedName = $this->sanitizeFileName($file->getClientOriginalName());
@@ -37,18 +45,14 @@ class FileController extends Controller
                 return back()->with('error', 'El archivo no parece ser un PDF válido.');
             }
 
-            $response = Http::timeout(30) // ✅ Timeout mayor para uploads
-                ->withToken($token)
-                ->attach('file', file_get_contents($file->getPathname()), $sanitizedName)
-                ->post($this->getApiUrl() . '/upload', [
-                    'invitacion_id' => $invitacion->id,
-                    'documento_tipo_id' => $request->input('documento_tipo_id'),
-                ]);
+            // Usar la API de concursos según documentación
+            $result = $api->subirDocumentoConcurso($concursoId, $file, $documentoTipoId);
 
-            if ($response->successful()) {
+            if ($result) {
                 Log::info('File uploaded successfully', [
                     'user_id' => Auth::id(),
-                    'invitacion_id' => $invitacion->id,
+                    'concurso_id' => $concursoId,
+                    'documento_tipo_id' => $documentoTipoId,
                     'file_name' => $sanitizedName
                 ]);
                 return back()->with('success', 'Archivo subido exitosamente.');
@@ -57,8 +61,8 @@ class FileController extends Controller
             // ✅ Log del error sin exponer detalles
             Log::error('File upload failed', [
                 'user_id' => Auth::id(),
-                'invitacion_id' => $invitacion->id,
-                'status' => $response->status()
+                'concurso_id' => $concursoId,
+                'documento_tipo_id' => $documentoTipoId
             ]);
 
             return back()->with('error', 'Error al procesar el archivo. Intente nuevamente.');
@@ -70,6 +74,138 @@ class FileController extends Controller
             ]);
             
             return back()->with('error', 'Error temporal del sistema. Intente nuevamente.');
+        }
+    }
+
+    /**
+     * Descargar documento de concurso usando la API de concursos
+     */
+    public function downloadConcursoDocumento(Request $request)
+    {
+        $validated = $request->validate([
+            'concurso_id' => 'required|integer|min:1',
+            'documento_id' => 'required|integer|min:1',
+        ]);
+        
+        try {
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new ConcursosApiService($token, $user->username);
+            
+            return $api->descargarDocumentoConcursoResponse(
+                $validated['concurso_id'], 
+                $validated['documento_id']
+            );
+            
+        } catch (\Exception $e) {
+            Log::error('Concurso document download exception', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+                'concurso_id' => $validated['concurso_id'] ?? 'unknown',
+                'documento_id' => $validated['documento_id'] ?? 'unknown'
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al descargar el documento. Intente nuevamente.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Descargar documento de proveedor usando la API
+     */
+    public function downloadProveedorDocumento(Request $request)
+    {
+        $validated = $request->validate([
+            'documento_id' => 'required|integer|min:1',
+        ]);
+        
+        try {
+            $proveedorService = new \App\Services\ProveedorApiService();
+            return $proveedorService->descargarDocumentoResponse($validated['documento_id']);
+            
+        } catch (\Exception $e) {
+            Log::error('Proveedor document download exception', [
+                'user_id' => Auth::id(),
+                'documento_id' => $validated['documento_id'] ?? 'unknown',
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al descargar el documento. Intente nuevamente.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener documentos de la invitación usando la API de concursos
+     */
+    public function getDocumentosInvitacion(int $concursoId)
+    {
+        try {
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new ConcursosApiService($token, $user->username);
+            
+            $documentos = $api->getDocumentosInvitacion($concursoId);
+            
+            return response()->json([
+                'success' => true,
+                'data' => $documentos
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Get documentos invitación exception', [
+                'user_id' => Auth::id(),
+                'concurso_id' => $concursoId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener documentos.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Verificar documento de proveedor usando la API de concursos
+     */
+    public function verificarDocumentoProveedor(int $concursoId, int $documentoTipoId)
+    {
+        try {
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new ConcursosApiService($token, $user->username);
+            
+            $documento = $api->verificarDocumentoProveedor($concursoId, $documentoTipoId);
+            
+            if ($documento) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $documento
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No hay documento válido para este tipo.'
+                ]);
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Verificar documento proveedor exception', [
+                'user_id' => Auth::id(),
+                'concurso_id' => $concursoId,
+                'documento_tipo_id' => $documentoTipoId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al verificar documento.'
+            ], 500);
         }
     }
 
@@ -106,43 +242,6 @@ class FileController extends Controller
             Log::error('Apoderado document upload exception', [
                 'user_id' => Auth::id(),
                 'error' => $e->getMessage()
-            ]);
-            
-            return back()->with('error', 'Error temporal del sistema. Intente nuevamente.');
-        }
-    }
-
-    public function downloadFileFromPlataforma(Request $request)
-    {
-        $validated = $request->validate([
-            'fileName' => 'required|string|max:255',
-            'disk' => 'required|string|in:concursos,proveedores' // ✅ Validar discos permitidos
-        ]);
-        
-        try {
-            $token = $this->authController->getNewToken();
-            
-            $response = Http::timeout(30)
-                ->withToken($token)
-                ->get($this->getApiUrl() . '/download', [
-                    'filename' => $validated['fileName'],
-                    'disk' => $validated['disk']
-                ]);
-            
-            if ($response->successful()) {
-                $tempPath = $validated['disk'] . '/' . $this->sanitizeFileName($validated['fileName']);
-                Storage::put($tempPath, $response->body());
-                
-                return Storage::download($tempPath);
-            }
-            
-            return back()->with('error', 'Error al descargar el archivo.');
-            
-        } catch (\Exception $e) {
-            Log::error('File download exception', [
-                'user_id' => Auth::id(),
-                'error' => $e->getMessage(),
-                'file' => $validated['fileName'] ?? 'unknown'
             ]);
             
             return back()->with('error', 'Error temporal del sistema. Intente nuevamente.');
