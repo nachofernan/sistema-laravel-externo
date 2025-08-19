@@ -70,12 +70,28 @@ class ActionModal extends Component
     {
         // Obtener los tipos de documentos de oferta
         $tiposDocumentosOferta = $this->getTiposDocumentosOferta();
+        //dump($tiposDocumentosOferta);
+        foreach ($tiposDocumentosOferta as $tipoDocumento) {
+            $tieneDocumentos = isset($tipoDocumento['documentos_oferta']) && 
+                is_array($tipoDocumento['documentos_oferta']) && 
+                count($tipoDocumento['documentos_oferta']) > 0;
+                if (!$tieneDocumentos) {
+                    if(!empty($tipoDocumento['tipo_documento_proveedor'])) {
+                        if(!$tipoDocumento['tipo_documento_proveedor']['id'])
+                            if($tipoDocumento['obligatorio']) {
+                                $this->obligatorios_completos = false;
+                            }
+                            $this->documentacion_completa = false;
+                    }
+                }
+        }
         
-        foreach($tiposDocumentosOferta as $tipoDocumento) {
+        /* foreach($tiposDocumentosOferta as $tipoDocumento) {
             // Verificar si tiene documentos subidos
             $tieneDocumentos = isset($tipoDocumento['documentos_oferta']) && 
                               is_array($tipoDocumento['documentos_oferta']) && 
                               count($tipoDocumento['documentos_oferta']) > 0;
+                              dump($tieneDocumentos);
             
             if (!$tieneDocumentos) {
                 // Si no tiene documentos subidos, verificar si tiene documento de proveedor asociado
@@ -84,13 +100,14 @@ class ActionModal extends Component
                     && Carbon::parse($tipoDocumento['tipo_documento_proveedor']['fecha_vencimiento'])->greaterThan(Carbon::parse($this->concurso->fecha_cierre)))
                     || !$tipoDocumento['tipo_documento_proveedor']['fecha_vencimiento']) {
                         continue;
-                }
-                $this->documentacion_completa = false;
-                if ($tipoDocumento['obligatorio']) {
-                    $this->obligatorios_completos = false;
+                } else {
+                    $this->documentacion_completa = false;
+                    if ($tipoDocumento['obligatorio']) {
+                        $this->obligatorios_completos = false;
+                    }
                 }
             }
-        }
+        } */
     }
 
     /**

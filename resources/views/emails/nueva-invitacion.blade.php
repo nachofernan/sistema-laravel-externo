@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
-    <title>Contraseña Temporal</title>
+    <title>Invitación a Concurso</title>
     <!--[if mso]>
     <style type="text/css">
         table {border-collapse: collapse; border-spacing: 0; margin: 0;}
@@ -38,22 +38,24 @@
             <td style="padding: 30px 20px;">
                 <table width="100%" cellpadding="0" cellspacing="0" border="0">
 
-                    <!-- Content -->
+                    <!-- Proveedor Info -->
                     <tr>
                         <td style="padding: 0 0 20px 0;">
-                            <h2 style="margin: 0 0 15px 0; font-size: 18px; color: #1F2937;">Bienvenido al Sistema de Concursos</h2>
+                            <h2 style="margin: 0 0 15px 0; font-size: 18px; color: #1F2937;">Concurso de Precios #{{ $invitacion->concurso->numero }}</h2>
+                            <h2 style="margin: 0 0 15px 0; font-size: 18px; color: #1F2937;">"{{ $invitacion->concurso->nombre }}"</h2>
                             <hr>
                             
                             <p style="margin: 0; font-size: 16px; color: #4B5563;">
-                                Se ha generado una contraseña temporal para su acceso al sistema.
+                                Estimado/a proveedor/a,
                             </p>
-                            <p style="margin: 10px 0 10px 0; font-size: 16px; color: #4B5563;">
-                                Su contraseña temporal es: <strong>{{ $temporaryPassword }}</strong>
+                            <p style="margin: 0; font-size: 16px; color: #4B5563;">
+                                Nos complace invitarle a participar en el Concurso de Precios de referencia
+                                <br><br>
+                                <strong>Descripción del Concurso:</strong> {{ $invitacion->concurso->descripcion }}.
+                                <br><br>
+                                <strong>Fecha de Cierre:</strong> {{ $invitacion->concurso->fecha_cierre->format('d-m-Y H:i') }}.
                             </p>
-                            <p style="margin: 10px 0 10px 0; font-size: 16px; color: #4B5563;">
-                                Por favor, ingrese al sistema utilizando su CUIT como nombre de usuario y esta contraseña temporal.
-                                Le recomendamos cambiar esta contraseña una vez que haya ingresado al sistema.
-                            </p>
+                            <p style="margin: 10px 0 10px 0; font-size: 16px; color: #4B5563;">Solicitamos tengan a bien confirmar sus intenciones de participación, ingresando al Link de acceso.</p>
                         </td>
                     </tr>
 
@@ -61,12 +63,12 @@
                     <tr>
                         <td style="padding: 10px 0 30px 0;" align="center">
                             <!--[if mso]>
-                            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ route('login') }}" style="height:40px;v-text-anchor:middle;width:200px;" arcsize="10%" stroke="f" fillcolor="#002E80">
+                            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="http://172.17.9.231/portalproveedores/public/concursos/{{ $invitacion->concurso->id }}" style="height:40px;v-text-anchor:middle;width:200px;" arcsize="10%" stroke="f" fillcolor="#002E80">
                                 <w:anchorlock/>
                                 <center>
                             <![endif]-->
-                            <a href="{{ route('login') }}" 
-                               style="background-color: #002E80; border-radius: 4px; color: #ffffff; display: inline-block; font-size: 14px; font-weight: bold; line-height: 40px; text-align: center; text-decoration: none; width: 200px; -webkit-text-size-adjust: none;">Ingresar al Sistema</a>
+                            <a href="http://172.17.9.231/portalproveedores/public/concursos/{{ $invitacion->concurso->id }}" 
+                               style="background-color: #002E80; border-radius: 4px; color: #ffffff; display: inline-block; font-size: 14px; font-weight: bold; line-height: 40px; text-align: center; text-decoration: none; width: 200px; -webkit-text-size-adjust: none;">Link al Concurso</a>
                             <!--[if mso]>
                                 </center>
                             </v:roundrect>
@@ -75,7 +77,7 @@
                     </tr>
                     <tr>
                         <td style="padding: 0 0 20px 0;">
-                            <p style="margin: 0; font-size: 16px; color: #4B5563;">Gracias,<br>{{ config('app.name') }}</p>
+                            <p style="margin: 0; font-size: 16px; color: #4B5563;">Agradecemos su interés y esperamos contar con su participación.</p>
                         </td>
                     </tr>
                 </table>
