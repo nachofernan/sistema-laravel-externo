@@ -36,11 +36,17 @@ class SubirArchivo extends Component
 
     public function submit()
     {
+        Log::info('SubirArchivo submit', [
+            'file' => $this->file,
+            'comentarios' => $this->comentarios,
+        ]);
+        Log::info('SubirArchivo validate');
         $this->validate([
             'file' => 'required|file|mimes:pdf|max:10240',
             'comentarios' => 'nullable|string|max:500',
         ]);
-
+        Log::info('SubirArchivo validate passed');
+        
         try {
             $user = Auth::user();
             $token = session('jwt_token');

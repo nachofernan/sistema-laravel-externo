@@ -12,7 +12,7 @@ use Illuminate\Http\UploadedFile;
 class ConcursosApiService
 {
     protected string $apiUrl;
-    protected string $token;
+    protected ?string $token;
     protected string $cuit;
 
     public function __construct(?string $token = null, ?string $cuit = null)
@@ -31,7 +31,7 @@ class ConcursosApiService
         Log::info('API Request Debug - Concursos', [
             'url' => "{$this->apiUrl}/api/concursos",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
             'cuit' => $this->cuit,
         ]);
         
@@ -63,23 +63,23 @@ class ConcursosApiService
      */
     public function getConcurso(int $concursoId): ?object
     {
-        Log::info('API Request Debug - Concurso Específico', [
+        /* Log::info('API Request Debug - Concurso Específico', [
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
             'cuit' => $this->cuit,
             'concurso_id' => $concursoId,
-        ]);
+        ]); */
         
         $response = Http::withToken($this->token)
             ->get("{$this->apiUrl}/api/concursos/{$concursoId}");
         
-        Log::info('API Response Debug - Concurso Específico', [
+        /* Log::info('API Response Debug - Concurso Específico', [
             'status' => $response->status(),
             'headers' => $response->headers(),
             'body_preview' => substr($response->body(), 0, 500),
             'successful' => $response->successful(),
-        ]);
+        ]); */
         
         if ($response->successful()) {
             return (object) ($response->json('data') ?? []);
@@ -102,7 +102,7 @@ class ConcursosApiService
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/invitacion",
             'intencion' => $intencion,
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
         ]);
         
         $response = Http::withToken($this->token)
@@ -136,7 +136,7 @@ class ConcursosApiService
         Log::info('API Request Debug - Tipos Documentos', [
             'url' => "{$this->apiUrl}/api/concursos/tipos-documentos",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
         ]);
         
         $response = Http::withToken($this->token)
@@ -163,7 +163,7 @@ class ConcursosApiService
      * Subir documento de concurso
      * Según documentación: POST /api/concursos/{concurso_id}/documentos
      */
-    public function subirDocumentoConcurso(int $concursoId, UploadedFile $file, int $documentoTipoId): ?object
+    public function subirDocumentoConcurso(int $concursoId, UploadedFile $file, ?int $documentoTipoId = null): ?object
     {
         Log::info('API Request Debug - Subir Documento Concurso', [
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos",
@@ -171,14 +171,18 @@ class ConcursosApiService
             'file_name' => $file->getClientOriginalName(),
             'file_size' => $file->getSize(),
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
         ]);
+
+        $payload = [];
+        // Solo agregamos el ID si no es nulo (para que no mande "documento_tipo_id": null a la API si no lo espera)
+        if ($documentoTipoId) {
+            $payload['documento_tipo_id'] = $documentoTipoId;
+        }
 
         $response = Http::withToken($this->token)
             ->attach('file', file_get_contents($file->getPathname()), $file->getClientOriginalName())
-            ->post("{$this->apiUrl}/api/concursos/{$concursoId}/documentos", [
-                'documento_tipo_id' => $documentoTipoId,
-            ]);
+            ->post("{$this->apiUrl}/api/concursos/{$concursoId}/documentos", $payload);
 
         Log::info('API Response Debug - Subir Documento Concurso', [
             'status' => $response->status(),
@@ -210,7 +214,7 @@ class ConcursosApiService
             'file_size' => $file->getSize(),
             'comentarios' => $comentarios,
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
         ]);
 
         $data = [];
@@ -249,7 +253,7 @@ class ConcursosApiService
         Log::info('API Request Debug - Documentos Invitación', [
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
         ]);
         
         $response = Http::withToken($this->token)
@@ -283,7 +287,7 @@ class ConcursosApiService
         Log::info('API Request Debug - Descargar Documento', [
             'url' => $url,
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
         ]);
         
         return Http::withToken($this->token)->get($url);
@@ -342,7 +346,7 @@ class ConcursosApiService
         Log::info('API Request Debug - Verificar Documento Proveedor', [
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoTipoId}/verificar",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
         ]);
         
         $response = Http::withToken($this->token)
@@ -384,22 +388,22 @@ class ConcursosApiService
      */
     public function getTiposDocumentosOferta(int $concursoId): ?array
     {
-        Log::info('API Request Debug - Tipos Documentos Oferta', [
+        /* Log::info('API Request Debug - Tipos Documentos Oferta', [
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/tipos-documentos-oferta",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
             'concurso_id' => $concursoId,
-        ]);
+        ]); */
         
         $response = Http::withToken($this->token)
             ->get("{$this->apiUrl}/api/concursos/{$concursoId}/tipos-documentos-oferta");
         
-        Log::info('API Response Debug - Tipos Documentos Oferta', [
+        /* Log::info('API Response Debug - Tipos Documentos Oferta', [
             'status' => $response->status(),
             'headers' => $response->headers(),
             'body_preview' => substr($response->body(), 0, 500),
             'successful' => $response->successful(),
-        ]);
+        ]); */
         
         if ($response->successful()) {
             $data = $response->json('data') ?? [];
@@ -422,7 +426,7 @@ class ConcursosApiService
         Log::info('API Request Debug - Eliminar Documento', [
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoId}",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
             'concurso_id' => $concursoId,
             'documento_id' => $documentoId,
         ]);
@@ -463,7 +467,7 @@ class ConcursosApiService
         Log::info('API Request Debug - Dar Baja Oferta', [
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/oferta",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
             'concurso_id' => $concursoId,
         ]);
         
@@ -498,21 +502,21 @@ class ConcursosApiService
      */
     public function getDocumentosAdicionales(int $concursoId): array
     {
-        Log::info('API Request Debug - Documentos Adicionales', [
+        /* Log::info('API Request Debug - Documentos Adicionales', [
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos-adicionales",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
             'concurso_id' => $concursoId,
-        ]);
+        ]); */
         
         $response = Http::withToken($this->token)
             ->get("{$this->apiUrl}/api/concursos/{$concursoId}/documentos-adicionales");
         
-        Log::info('API Response Debug - Documentos Adicionales', [
+        /* Log::info('API Response Debug - Documentos Adicionales', [
             'status' => $response->status(),
             'body_preview' => substr($response->body(), 0, 500),
             'successful' => $response->successful(),
-        ]);
+        ]); */
         
         if ($response->successful()) {
             return $response->json('data') ?? [];

@@ -46,7 +46,7 @@ class PasswordResetController extends Controller
         ]);
 
         // Enviar el email con el link de reseteo
-        if(str_ends_with($user->email, '@buenosairesenergia.com.ar')) {
+        if(app()->environment('production') || str_ends_with($user->email, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
             Mail::to([$user->email])->send(new PasswordResetMail($token, $user));
         }
         //Mail::to($user->email)->send(new PasswordResetMail($token, $user));

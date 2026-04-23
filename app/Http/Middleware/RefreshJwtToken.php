@@ -40,14 +40,20 @@ class RefreshJwtToken
                         session(['jwt_token' => $newToken]);
                         Log::info('JWT token renovado tras excepción', ['user_id' => Auth::id(), 'error' => $e->getMessage()]);
                     } catch (\Exception $ex) {
-                        Log::error('No se pudo refrescar el JWT token', [
+                        Log::error('Fallo crítico de JWT: Limpiando sesión', [
                             'user_id' => Auth::id(),
                             'error' => $ex->getMessage()
                         ]);
-                        Auth::guard('web')->logout();
-                        session()->invalidate();
-                        session()->regenerateToken();
-                        return redirect()->route('login')->with('error', 'La sesión expiró. Por favor, ingrese nuevamente.');
+
+                        Auth::logout();
+                        
+                        // ✅ Estas 3 líneas limpian las cookies y la sesión del lado del servidor
+                        $request->session()->invalidate();
+                        $request->session()->regenerateToken();
+                        
+                        return redirect()->route('login')
+                            ->with('error', 'Su sesión ha expirado. Ingrese nuevamente.')
+                            ->withCookie(cookie()->forget('laravel_session')); // Forzar borrado de cookie
                     }
                 }
             } else {

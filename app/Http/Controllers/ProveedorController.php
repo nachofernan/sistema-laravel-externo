@@ -36,11 +36,19 @@ class ProveedorController extends Controller
                     'session_id' => session()->getId(),
                     'user' => $user,
                 ]);
+
+                // ✅ Cambio clave: Especificar el guard 'web'
+                Auth::guard('web')->logout();
+                session()->invalidate();
+                session()->regenerateToken();
+
                 return redirect()->route('login')
-                    ->with('error', 'Error al cargar datos del proveedor.');
+                    ->with('error', 'Error al cargar datos del proveedor.')->withCookie(cookie()->forget('laravel_session'));
             }
+
+            $tipos_documentos = $api->getTiposDocumentos()['tipos_documentos'] ?? [];
     
-            return view('dashboard', compact('proveedor'));
+            return view('dashboard', compact('proveedor', 'tipos_documentos'));
         } catch (\Exception $e) {
             Log::error('Dashboard exception', [
                 'user_id' => Auth::id(),
@@ -48,8 +56,14 @@ class ProveedorController extends Controller
                 'trace' => $e->getTraceAsString(),
                 'session_id' => session()->getId(),
             ]);
+
+            // ✅ Cambio clave: Especificar el guard 'web'
+            Auth::guard('web')->logout();
+            session()->invalidate();
+            session()->regenerateToken();
+            
             return redirect()->route('login')
-                ->with('error', 'Error temporal del sistema. Intente nuevamente.');
+                ->with('error', 'Error temporal del sistema. Intente nuevamente.')->withCookie(cookie()->forget('laravel_session'));
         }
     }
 

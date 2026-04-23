@@ -46,7 +46,7 @@
                         type="text" 
                         wire:model.live.debounce.500ms="cuit"
                         placeholder="Ingrese su CUIT sin guiones"
-                        maxlength="11"
+                        maxlength="15"
                         required 
                         autofocus 
                         autocomplete="off"
@@ -135,6 +135,10 @@
                 <a href="{{ route('bienvenido') }}"
                    class="block pt-2 px-4 text-blue-600 hover:underline">
                     Completar Formulario de Registro
+                </a>
+                <a href="https://buenosairesenergia.com.ar/docs/REGISTRO_DE_PROVEEDORES_DE_BAESA.pdf" target="_blank"
+                   class="block pt-2 px-4 text-blue-600 hover:underline">
+                    Descargar Instructivo de Ingreso y Carga de Documentos
                 </a>
             </div>
         </div>

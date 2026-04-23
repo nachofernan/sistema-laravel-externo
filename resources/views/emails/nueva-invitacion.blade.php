@@ -63,11 +63,11 @@
                     <tr>
                         <td style="padding: 10px 0 30px 0;" align="center">
                             <!--[if mso]>
-                            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="http://172.17.9.231/portalproveedores/public/concursos/{{ $invitacion->concurso->id }}" style="height:40px;v-text-anchor:middle;width:200px;" arcsize="10%" stroke="f" fillcolor="#002E80">
+                            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="https://buenosairesenergia.com.ar/registroproveedores/concursos/{{ $invitacion->concurso->id }}" style="height:40px;v-text-anchor:middle;width:200px;" arcsize="10%" stroke="f" fillcolor="#002E80">
                                 <w:anchorlock/>
                                 <center>
                             <![endif]-->
-                            <a href="http://172.17.9.231/portalproveedores/public/concursos/{{ $invitacion->concurso->id }}" 
+                            <a href="https://buenosairesenergia.com.ar/registroproveedores/concursos/{{ $invitacion->concurso->id }}" 
                                style="background-color: #002E80; border-radius: 4px; color: #ffffff; display: inline-block; font-size: 14px; font-weight: bold; line-height: 40px; text-align: center; text-decoration: none; width: 200px; -webkit-text-size-adjust: none;">Link al Concurso</a>
                             <!--[if mso]>
                                 </center>

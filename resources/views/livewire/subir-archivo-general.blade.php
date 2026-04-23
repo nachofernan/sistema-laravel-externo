@@ -20,7 +20,8 @@
                         Archivo
                     </div>
                     <div class="col-span-7">
-                        <input type="file" wire:model="file" class="input-full" required accept=".pdf">
+                        <input type="file" wire:model.live="file" class="input-full" required accept=".pdf">
+			@error('file') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                     </div>
 
                     <div class="col-span-3 text-right mt-2">
@@ -36,6 +37,7 @@
                                 <option value="{{ $docObj->id }}">{{ $docObj->nombre }}</option>
                             @endforeach
                         </select>
+			@error('documento_tipo_id') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                     </div>
 
                     <div class="col-span-3 text-right mt-2">

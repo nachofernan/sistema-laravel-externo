@@ -12,7 +12,7 @@ use Illuminate\Http\UploadedFile;
 class ProveedorApiService
 {
     protected string $apiUrl;
-    protected string $token;
+    protected ?string $token;
     protected string $cuit;
 
     public function __construct(?string $token = null, ?string $cuit = null)
@@ -30,12 +30,30 @@ class ProveedorApiService
         Log::info('API Request Debug', [
             'url' => "{$this->apiUrl}/api/proveedores/{$this->cuit}",
             'token' => $this->token,
-            'token_length' => strlen($this->token),
+            'token_length' => strlen($this->token ?? ''),
             'cuit' => $this->cuit,
         ]);
         
         $response = Http::withToken($this->token)
             ->get("{$this->apiUrl}/api/proveedores/{$this->cuit}");
+
+Log::info('API Response Debug', [
+            'status' => $response->status(),
+            'headers' => $response->headers(),
+            'body_preview' => substr($response->body(), 0, 500),
+            'successful' => $response->successful(),
+        ]);
+
+
+// Si el token expir� (401), intentamos renovarlo una vez
+    if ($response->status() === 401) {
+        Log::info('Token expirado detectado. Intentando renovar...');
+        
+        if ($this->refreshToken()) {
+            // Reintentamos la petici�n con el nuevo token
+            $response = Http::withToken($this->token)->get("{$this->apiUrl}/api/proveedores/{$this->cuit}");
+        }
+    }
         
         Log::info('API Response Debug', [
             'status' => $response->status(),
@@ -50,6 +68,26 @@ class ProveedorApiService
         Log::error('API: Error al obtener datos del proveedor', ['status' => $response->status(), 'body' => $response->body()]);
         return null;
     }
+
+/**
+ * M�todo privado para obtener un nuevo token y actualizar la sesi�n
+ */
+private function refreshToken(): bool
+{
+    try {
+        // Llamamos a tu AuthController para generar uno nuevo
+        $newToken = app(\App\Http\Controllers\AuthController::class)->getNewToken();
+        
+        // Actualizamos la propiedad de la clase y la sesi�n
+        $this->token = $newToken;
+        session(['jwt_token' => $newToken]);
+        
+        return true;
+    } catch (\Exception $e) {
+        Log::error('No se pudo refrescar el token', ['error' => $e->getMessage()]);
+        return false;
+    }
+}
 
     /**
      * Obtener tipos de documentos y apoderados

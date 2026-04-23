@@ -147,9 +147,9 @@ class ProgressiveLoginController extends Controller
         try {
             $token = app(\App\Http\Controllers\AuthController::class)->getNewToken();
             session(['jwt_token' => $token]);
-            \Log::info('JWT token guardado en sesión', ['user_id' => $user->id, 'token' => $token]);
+            Log::info('JWT token guardado en sesión', ['user_id' => $user->id, 'token' => $token]);
         } catch (\Exception $e) {
-            \Log::error('No se pudo obtener el token JWT', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+            Log::error('No se pudo obtener el token JWT', ['user_id' => $user->id, 'error' => $e->getMessage()]);
         }
 
         // Limpiar rate limiting
@@ -239,7 +239,7 @@ class ProgressiveLoginController extends Controller
 
         // Enviar email
         try {
-            if (str_ends_with($proveedor->correo, '@buenosairesenergia.com.ar')) {
+            if (app()->environment('production') || str_ends_with($proveedor->correo, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
                 Mail::to($proveedor->correo)->send(new TemporaryPasswordMail($temporaryPassword));
             }
 

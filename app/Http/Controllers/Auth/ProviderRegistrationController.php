@@ -56,7 +56,7 @@ class ProviderRegistrationController extends Controller
 
         // Enviar email con la contraseña temporal
         //Mail::to($proveedor->email)->send(new TemporaryPasswordMail($temporaryPassword));
-        if(str_ends_with($proveedor->correo, '@buenosairesenergia.com.ar')) {
+        if(app()->environment('production') || str_ends_with($proveedor->correo, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
             Mail::to([$proveedor->correo])->send(new TemporaryPasswordMail($temporaryPassword));
         }
         //Mail::to('ifernandez@ccasa.com.ar')->send(new TemporaryPasswordMail($temporaryPassword));

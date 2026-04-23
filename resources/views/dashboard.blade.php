@@ -45,7 +45,52 @@
                             <h2 class="text-xl mb-4 text-gray-700 flex justify-between items-center">
                                 <div class="font-semibold">Documentación</div>
                                 <div>
-                                    @livewire('subir-archivo-general', ['proveedor_id' => $proveedor->id])
+                                    {{-- @livewire('subir-archivo-general', ['proveedor_id' => $proveedor->id]) --}}
+                                    <div x-data="{ openModal: false }">
+                                        <button type="button" @click="openModal = true" class="link-azul">
+                                            Nuevo Documento
+                                        </button>
+
+                                        <div x-show="openModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+                                            <div class="flex items-center justify-center min-h-screen px-4">
+                                                <div class="fixed inset-0 bg-gray-500 opacity-75"></div>
+
+                                                <div class="bg-white rounded-lg overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full p-6">
+                                                    <h3 class="text-lg font-medium mb-4">Subir Documento General</h3>
+                                                    
+                                                    <form action="{{ route('proveedor.subir.documento') }}" method="POST" enctype="multipart/form-data">
+                                                        @csrf
+                                                        <div class="space-y-4">
+                                                            <div>
+                                                                <label>Archivo PDF</label>
+                                                                <input type="file" name="file" class="block w-full border" required>
+                                                            </div>
+                                                            
+                                                            <div>
+                                                                <label>Tipo de Documento</label>
+                                                                <select name="documento_tipo_id" class="block w-full border" required>
+                                                                    <option value="">Seleccione...</option>
+                                                                    @foreach($tipos_documentos as $tipo)
+                                                                        <option value="{{ $tipo['id'] }}">{{ $tipo['nombre'] }}</option>
+                                                                    @endforeach
+                                                                </select>
+                                                            </div>
+
+                                                            <div>
+                                                                <label>Vencimiento</label>
+                                                                <input type="date" name="vencimiento" class="block w-full border">
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="mt-6 flex justify-end gap-2">
+                                                            <button type="button" @click="openModal = false" class="bg-gray-300 px-4 py-2 rounded">Cancelar</button>
+                                                            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Subir ahora</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </h2>
 
@@ -72,9 +117,9 @@
                                                         {{ \Carbon\Carbon::parse($doc->vencimiento)->format('d/m/Y') }}
                                                         @if (\Carbon\Carbon::parse($doc->vencimiento)->isPast())
                                                             <span class="text-red-600 font-medium">(Vencido)</span>
-                                                        @elseif (\Carbon\Carbon::parse($doc->vencimiento)->diffInDays(now()) <= 30)
+                                                        {{-- @elseif (\Carbon\Carbon::parse($doc->vencimiento)->diffInDays(now()) <= 30)
                                                             <span class="text-orange-600 font-medium">(Por
-                                                                vencer)</span>
+                                                                vencer)</span> --}}
                                                         @endif
                                                     </div>
                                                 @endif
@@ -101,7 +146,50 @@
                             <h2 class="text-xl mb-4 text-gray-700 flex justify-between items-center">
                                 <div class="font-semibold">Representantes Legales/Apoderados</div>
                                 <div>
-                                    @livewire('subir-archivo-apoderado', ['proveedor_id' => $proveedor->id])
+                                    <div x-data="{ openApoderado: false, tipo: 'apoderado' }">
+                                        <button type="button" @click="openApoderado = true" class="link-azul text-sm">
+                                            Nuevo Apoderado
+                                        </button>
+
+                                        <div x-show="openApoderado" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" x-cloak>
+                                            <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6" @click.away="openApoderado = false">
+                                                <h3 class="text-lg font-bold mb-4">Cargar Nuevo Apoderado / Representante</h3>
+
+                                                <form action="{{ route('proveedor.subir.apoderado') }}" method="POST" enctype="multipart/form-data">
+                                                    @csrf
+                                                    <div class="space-y-4">
+                                                        <div>
+                                                            <label class="block text-sm font-medium">Archivo PDF</label>
+                                                            <input type="file" name="file" class="w-full border p-2 rounded" required accept=".pdf">
+                                                        </div>
+
+                                                        <div>
+                                                            <label class="block text-sm font-medium">Tipo</label>
+                                                            <select name="tipo" x-model="tipo" class="w-full border p-2 rounded" required>
+                                                                <option value="apoderado">Apoderado</option>
+                                                                <option value="representante">Representante Legal</option>
+                                                            </select>
+                                                        </div>
+
+                                                        <div x-show="tipo === 'representante'">
+                                                            <label class="block text-sm font-medium">Nombre Completo</label>
+                                                            <input type="text" name="nombre" class="w-full border p-2 rounded" :required="tipo === 'representante'">
+                                                        </div>
+
+                                                        <div>
+                                                            <label class="block text-sm font-medium">Vencimiento</label>
+                                                            <input type="date" name="vencimiento" class="w-full border p-2 rounded">
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="mt-6 flex justify-end space-x-3">
+                                                        <button type="button" @click="openApoderado = false" class="px-4 py-2 bg-gray-200 rounded">Cancelar</button>
+                                                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded">Cargar Documento</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </h2>
 

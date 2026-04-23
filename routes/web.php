@@ -15,17 +15,37 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Livewire\Livewire;
 
-Livewire::setUpdateRoute(function ($handle) {
-    return Route::post('portalproveedores/public/livewire/update', $handle);
-});
-Livewire::setScriptRoute(function ($handle) {
-    return Route::get('portalproveedores/public/livewire/livewire.js', $handle);
-});
-
+if(app()->environment('production')) {
+    Livewire::setUpdateRoute(function ($handle) {
+        return Route::post('registroproveedores/livewire/update', $handle);
+    });
+    Livewire::setScriptRoute(function ($handle) {
+        return Route::get('registroproveedores/livewire/livewire.js', $handle);
+    });
+} else {
+    Livewire::setUpdateRoute(function ($handle) {
+        return Route::post('portalproveedores/public/livewire/update', $handle);
+    });
+    Livewire::setScriptRoute(function ($handle) {
+        return Route::get('portalproveedores/public/livewire/livewire.js', $handle);
+    });
+}
 // Ruta principal
 Route::get('/', function () {
     return redirect()->route('login');
 });
+
+Route::post('/proveedor/subir-documento', [FileController::class, 'uploadDocumentoGeneral'])
+    ->name('proveedor.subir.documento')
+    ->middleware('auth');
+
+Route::post('/proveedor/subir-apoderado', [FileController::class, 'uploadApoderado'])
+    ->name('proveedor.subir.apoderado')
+    ->middleware('auth');
+
+Route::post('/concursos/{concursoId}/subir-archivo', [FileController::class, 'uploadConcursoFile'])
+    ->name('concursos.file.upload')
+    ->middleware('auth');
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)

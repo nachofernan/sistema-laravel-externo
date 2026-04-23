@@ -269,11 +269,41 @@
                                                         
                                                         <div class="ml-4">
                                                             @if ($puedeCargarOferta)
-                                                                @livewire('concursos.subir-archivo', [
-                                                                    'concurso' => $concursoObj, 
-                                                                    'invitacion' => $invitacion, 
-                                                                    'documento' => $tipoDocOfertaObj
-                                                                ], key('subir-archivo-oferta-' . $tipoDocOfertaObj->id))
+                                                                <div x-data="{ openConcurso: false }">
+                                                                    <button type="button" @click="openConcurso = true" class="rounded py-1 px-3 text-blue-500 hover:underline text-sm">
+                                                                        {{ $tipoDocOfertaObj->id ? 'Cargar' : 'Cargar Adicional' }}
+                                                                    </button>
+
+                                                                    <div x-show="openConcurso" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" x-cloak>
+                                                                        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6" @click.away="openConcurso = false">
+                                                                            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                                                                                <h2 class="text-xl font-semibold text-gray-800">
+                                                                                    Cargar: <span class="text-blue-600">{{ $tipoDocOfertaObj->nombre ?? 'Documento Adicional' }}</span>
+                                                                                </h2>
+                                                                                <button @click="openConcurso = false" class="text-gray-500 hover:text-gray-700">&times;</button>
+                                                                            </div>
+
+                                                                            <form action="{{ route('concursos.file.upload', $concurso->id) }}" method="POST" enctype="multipart/form-data">
+                                                                                @csrf
+                                                                                <input type="hidden" name="documento_tipo_id" value="{{ $tipoDocOfertaObj->id ?? '' }}">
+
+                                                                                <div class="space-y-4">
+                                                                                    <div>
+                                                                                        <label class="block text-sm font-medium text-gray-700">Seleccionar archivo PDF</label>
+                                                                                        <input type="file" name="file" class="w-full border p-2 rounded mt-1" required accept=".pdf">
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                <div class="mt-6 flex justify-end space-x-3">
+                                                                                    <button type="button" @click="openConcurso = false" class="px-4 py-2 bg-gray-200 rounded text-sm">Cancelar</button>
+                                                                                    <button type="submit" class="px-4 py-2 bg-cyan-500 text-white rounded text-sm hover:bg-cyan-600">
+                                                                                        Subir Archivo
+                                                                                    </button>
+                                                                                </div>
+                                                                            </form>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             @else
                                                                 <div class="text-gray-400 text-sm">
                                                                     Carga inactiva
@@ -397,11 +427,41 @@
                                                     
                                                     <div class="ml-4">
                                                         @if ($puedeCargarAdicionales)
-                                                            @livewire('concursos.subir-archivo', [
-                                                                'concurso' => $concursoObj, 
-                                                                'invitacion' => $invitacion, 
-                                                                'documento' => null
-                                                            ], key('subir-archivo-adicional'))
+                                                            <div x-data="{ openConcurso: false }">
+                                                                <button type="button" @click="openConcurso = true" class="rounded py-1 px-3 text-blue-500 hover:underline text-sm">
+                                                                    Cargar Adicional
+                                                                </button>
+
+                                                                <div x-show="openConcurso" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" x-cloak>
+                                                                    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6" @click.away="openConcurso = false">
+                                                                        <div class="flex justify-between items-center mb-4 border-b pb-2">
+                                                                            <h2 class="text-xl font-semibold text-gray-800">
+                                                                                Cargar: <span class="text-blue-600">Documento Adicional</span>
+                                                                            </h2>
+                                                                            <button @click="openConcurso = false" class="text-gray-500 hover:text-gray-700">&times;</button>
+                                                                        </div>
+
+                                                                        <form action="{{ route('concursos.file.upload', $concurso->id) }}" method="POST" enctype="multipart/form-data">
+                                                                            @csrf
+                                                                            <input type="hidden" name="documento_tipo_id" value="">
+
+                                                                            <div class="space-y-4">
+                                                                                <div>
+                                                                                    <label class="block text-sm font-medium text-gray-700">Seleccionar archivo PDF</label>
+                                                                                    <input type="file" name="file" class="w-full border p-2 rounded mt-1" required accept=".pdf">
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <div class="mt-6 flex justify-end space-x-3">
+                                                                                <button type="button" @click="openConcurso = false" class="px-4 py-2 bg-gray-200 rounded text-sm">Cancelar</button>
+                                                                                <button type="submit" class="px-4 py-2 bg-cyan-500 text-white rounded text-sm hover:bg-cyan-600">
+                                                                                    Subir Archivo
+                                                                                </button>
+                                                                            </div>
+                                                                        </form>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                         @else
                                                             <div class="text-gray-400 text-sm">
                                                                 Carga inactiva

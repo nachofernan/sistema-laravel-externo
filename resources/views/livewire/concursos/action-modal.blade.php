@@ -15,7 +15,7 @@
         </button>
     @elseif ($estadoBoton === 'presentar_oferta_faltante')
         <button class="px-8 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors duration-300 text-md mt-1" wire:click="$set('open', true)"> 
-            Presentar Oferta con Documentación Faltante
+            Presentar Oferta
         </button>
     @elseif ($estadoBoton === 'falta_documentacion_obligatoria')
         <span class="px-8 py-3 bg-red-500 text-white rounded-lg text-md mt-1 "> 

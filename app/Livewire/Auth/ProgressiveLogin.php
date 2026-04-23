@@ -92,6 +92,18 @@ class ProgressiveLogin extends Component
             $this->addError('general', 'Error interno. Intente nuevamente.');
             return;
         }
+        
+        // Buscar el correo actual del proveedor
+        $proveedor = Proveedor::on('proveedores')->where('cuit', $this->cuit)->first();
+        if (!$proveedor) {
+            $this->addError('general', 'Error interno al buscar el proveedor, contáctese con la empresa.');
+            return;
+        }
+
+        if($user->email != $proveedor->correo) {
+            $user->email = $proveedor->correo;
+            $user->save();
+        }
 
         // Generar token único
         $token = Str::random(64);
@@ -108,7 +120,7 @@ class ProgressiveLogin extends Component
 
         // Enviar el email con el link de reseteo
         try {
-            if(str_ends_with($user->email, '@buenosairesenergia.com.ar')) {
+            if(app()->environment('production') || str_ends_with($user->email, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
                 Mail::to([$user->email])->send(new PasswordResetMail($token, $user));
             }
 
@@ -292,7 +304,7 @@ class ProgressiveLogin extends Component
             $maskedEmail = $this->maskEmail($proveedor->correo);
 
             // Enviar email solo a dominios autorizados
-            if (str_ends_with($proveedor->correo, '@buenosairesenergia.com.ar')) {
+            if(app()->environment('production') || str_ends_with($user->email, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
                 Mail::to($proveedor->correo)->send(new TemporaryPasswordMail($temporaryPassword));
             }
 

@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Services\ConcursosApiService;
+use App\Services\ProveedorApiService;
+
 
 class FileController extends Controller
 {
@@ -342,5 +344,104 @@ class FileController extends Controller
         }
 
         return rtrim($url, '/');
+    }
+
+    public function uploadDocumentoGeneral(Request $request)
+    {
+        // 1. Validación clásica
+        $request->validate([
+            'file' => 'required|file|mimes:pdf|max:10240',
+            'documento_tipo_id' => 'required',
+            'vencimiento' => 'nullable|date',
+        ]);
+
+        try {
+            $user = Auth::user();
+            // Usamos el servicio de proveedores
+            $api = new ProveedorApiService(); 
+            
+            $file = $request->file('file');
+            
+            // 2. Llamada a la API (reutilizando tu lógica de sanitización si querés)
+            $result = $api->subirDocumento(
+                $file, 
+                (int)$request->input('documento_tipo_id'), 
+                $request->input('vencimiento')
+            );
+
+            if ($result) {
+                return back()->with('success', 'Documento cargado con éxito.');
+            }
+
+            return back()->with('error', 'La API no pudo procesar el documento.');
+
+        } catch (\Exception $e) {
+            Log::error('Error en uploadDocumentoGeneral: ' . $e->getMessage());
+            return back()->with('error', 'Error de conexión con el servidor de archivos.');
+        }
+    }
+
+    public function uploadApoderado(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:pdf|max:10240',
+            'tipo' => 'required|in:apoderado,representante',
+            'nombre' => 'required_if:tipo,representante|nullable|string',
+            'vencimiento' => 'nullable|date',
+        ]);
+
+        try {
+            $api = new ProveedorApiService();
+            
+            $result = $api->subirApoderado(
+                $request->file('file'),
+                $request->input('tipo'),
+                $request->input('nombre'),
+                $request->input('vencimiento')
+            );
+
+            if ($result) {
+                return back()->with('success', 'Apoderado/Representante cargado con éxito.');
+            }
+
+            return back()->with('error', 'La API no pudo procesar la carga del apoderado.');
+
+        } catch (\Exception $e) {
+            Log::error('Error en uploadApoderado: ' . $e->getMessage());
+            return back()->with('error', 'Error de comunicación al subir apoderado.');
+        }
+    }
+
+    public function uploadConcursoFile(Request $request, $concursoId)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:pdf|max:10240',
+            'documento_tipo_id' => 'nullable', // Permitimos que venga vacío
+        ]);
+
+        try {
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new ConcursosApiService($token, $user->username);
+
+            // Convertimos a int solo si tiene valor, sino null
+            $docId = $request->filled('documento_tipo_id') ? (int)$request->input('documento_tipo_id') : null;
+
+            $result = $api->subirDocumentoConcurso(
+                (int)$concursoId,
+                $request->file('file'),
+                $docId // Aquí ya puede ir null sin que PHP chille
+            );
+
+            if ($result) {
+                return back()->with('success', 'Archivo cargado correctamente.');
+            }
+
+            return back()->with('error', 'La API no pudo procesar el archivo.');
+
+        } catch (\Exception $e) {
+            Log::error('Error en uploadConcursoFile: ' . $e->getMessage());
+            return back()->with('error', 'Error crítico al subir archivo.');
+        }
     }
 }

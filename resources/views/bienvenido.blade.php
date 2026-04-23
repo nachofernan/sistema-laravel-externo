@@ -2,13 +2,13 @@
     <div class="min-h-screen flex items-center justify-center bg-gray-100 py-6">
         <div class="w-full max-w-2xl p-8 bg-white rounded-2xl shadow-xl">
             {{-- <a href="{{route('login')}}"  --}}
-            <a href="https://www.buenosairesenergia.com.ar" 
+            <a href="https://buenosairesenergia.com.ar/registroproveedores/login" 
                class="inline-flex items-center text-blue-600 hover:underline mb-4"
                aria-label="Volver al sitio principal">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
-                Volver al Portal de Proveedores
+                Volver al Registro de Proveedores
             </a>
             <div class="mb-6 text-center flex flex-col items-center">
                 <x-authentication-card-logo />

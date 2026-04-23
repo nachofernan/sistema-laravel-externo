@@ -17,12 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'force.password.change' => \App\Http\Middleware\ForcePasswordChange::class,
         ]);
 
-        $middleware->web(append: [
-            \App\Http\Middleware\SecurityHeaders::class,
-            \App\Http\Middleware\RefreshJwtToken::class,
-        ]);
-
         //$middleware->append(\App\Http\Middleware\ForcePasswordChange::class);
+        $middleware->validateCsrfTokens(except: [
+            'livewire/*',
+            'registroproveedores/livewire/*', // Tu ruta personalizada
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

@@ -48,11 +48,11 @@ class ActionModal extends Component
         try {
             $this->checkDocumentacionFromApi();
             // Debug log
-            Log::info('Documentación check result', [
+            /* Log::info('Documentación check result', [
                 'concurso_id' => $this->concurso->id ?? 'unknown',
                 'completa' => $this->documentacion_completa,
                 'intencion' => $this->invitacion->intencion ?? 'unknown'
-            ]);
+            ]); */
         } catch (\Exception $e) {
             Log::error('Error checking documentation', [
                 'error' => $e->getMessage(),
@@ -68,46 +68,42 @@ class ActionModal extends Component
      */
     private function checkDocumentacionFromApi()
     {
-        // Obtener los tipos de documentos de oferta
-        $tiposDocumentosOferta = $this->getTiposDocumentosOferta();
-        //dump($tiposDocumentosOferta);
-        foreach ($tiposDocumentosOferta as $tipoDocumento) {
-            $tieneDocumentos = isset($tipoDocumento['documentos_oferta']) && 
-                is_array($tipoDocumento['documentos_oferta']) && 
-                count($tipoDocumento['documentos_oferta']) > 0;
-                if (!$tieneDocumentos) {
-                    if(!empty($tipoDocumento['tipo_documento_proveedor'])) {
-                        if(!$tipoDocumento['tipo_documento_proveedor']['id'])
-                            if($tipoDocumento['obligatorio']) {
-                                $this->obligatorios_completos = false;
-                            }
-                            $this->documentacion_completa = false;
-                    }
-                }
+        $tipos = $this->getTiposDocumentosOferta();
+
+        // REGLA DE REUNIÓN: Si no se pide nada, está todo completo por definición.
+        if (empty($tipos)) {
+            $this->documentacion_completa = true;
+            $this->obligatorios_completos = true;
+            return;
         }
-        
-        /* foreach($tiposDocumentosOferta as $tipoDocumento) {
-            // Verificar si tiene documentos subidos
-            $tieneDocumentos = isset($tipoDocumento['documentos_oferta']) && 
-                              is_array($tipoDocumento['documentos_oferta']) && 
-                              count($tipoDocumento['documentos_oferta']) > 0;
-                              dump($tieneDocumentos);
+
+        // Si llegamos acá, HAY requerimientos. Por lo tanto, empezamos asumiendo que falta algo.
+        $faltanObligatorios = false;
+        $faltanOpcionales = false;
+
+        foreach ($tipos as $tipo) {
+            // Un ítem está cubierto si: tiene archivos OR asociación válida
+            $tieneArchivos = !empty($tipo['documentos_oferta']);
+            $tieneAsociacionValida = isset($tipo['tipo_documento_proveedor']['id']) && !is_null($tipo['tipo_documento_proveedor']['id']);
             
-            if (!$tieneDocumentos) {
-                // Si no tiene documentos subidos, verificar si tiene documento de proveedor asociado
-                if ($tipoDocumento['tipo_documento_proveedor_id'] 
-                    && ($tipoDocumento['tipo_documento_proveedor']['fecha_vencimiento'] 
-                    && Carbon::parse($tipoDocumento['tipo_documento_proveedor']['fecha_vencimiento'])->greaterThan(Carbon::parse($this->concurso->fecha_cierre)))
-                    || !$tipoDocumento['tipo_documento_proveedor']['fecha_vencimiento']) {
-                        continue;
+            $itemCubierto = $tieneArchivos || $tieneAsociacionValida;
+            $esObligatorio = (bool)($tipo['obligatorio'] ?? false);
+
+            if (!$itemCubierto) {
+                if ($esObligatorio) {
+                    $faltanObligatorios = true;
                 } else {
-                    $this->documentacion_completa = false;
-                    if ($tipoDocumento['obligatorio']) {
-                        $this->obligatorios_completos = false;
-                    }
+                    $faltanOpcionales = true;
                 }
             }
-        } */
+        }
+
+        // RESULTADO FINAL
+        // No puede estar completa si falta CUALQUIER cosa (obligatoria o no)
+        $this->documentacion_completa = !$faltanObligatorios && !$faltanOpcionales;
+        
+        // Lo único que bloquea la presentación es la falta de obligatorios
+        $this->obligatorios_completos = !$faltanObligatorios;
     }
 
     /**
