@@ -4,291 +4,227 @@ namespace App\Livewire\Concursos;
 
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Livewire\Component;
 use App\Services\ConcursosApiService;
+use Livewire\Attributes\Computed;
 
 class ActionModal extends Component
 {
     public $open = false;
     public $concurso;
     public $invitacion;
-    public $documentacion_completa;
-    public $concurso_activo;
-    public $antes_del_cierre;
-    public $obligatorios_completos;
-    
+    public $documentacion_completa = false;
+    public $obligatorios_completos = false;
+
     // Propiedades para dar de baja la oferta
     public $dando_baja = false;
     public $password = '';
 
-    public function mount($concurso, $invitacion) {
+    // Propiedades para el flujo de rechazo con motivo
+    public $mostrando_motivo = false;
+    public $motivo_seleccionado = '';
+    public $motivo_texto = '';
+
+    public function mount($concurso, $invitacion)
+    {
         $this->concurso = $concurso;
         $this->invitacion = $invitacion;
-        $this->initializeState();
-    }
-
-    private function initializeState()
-    {
-        // Verificar si el concurso está activo y antes del cierre
-        $this->concurso_activo = isset($this->concurso->estado) && 
-            (is_array($this->concurso->estado) ? $this->concurso->estado['estado_actual'] : $this->concurso->estado->estado_actual) == 'activo';
-        
-        $this->antes_del_cierre = isset($this->concurso->fecha_cierre) && 
-            Carbon::parse($this->concurso->fecha_cierre)->isFuture();
-        
-        // Verificar documentación
         $this->checkDocumentacion();
     }
 
-    public function checkDocumentacion() {
-        $this->documentacion_completa = true;
-        $this->obligatorios_completos = true;
+    /**
+     * Determina el estado del concurso (activo y antes del cierre)
+     */
+    #[Computed]
+    public function isActivo()
+    {
+        $estadoActual = is_array($this->concurso->estado) 
+            ? ($this->concurso->estado['estado_actual'] ?? '') 
+            : ($this->concurso->estado->estado_actual ?? '');
+
+        $antesDelCierre = isset($this->concurso->fecha_cierre) && 
+            Carbon::parse($this->concurso->fecha_cierre)->isFuture();
+
+        return $estadoActual === 'activo' && $antesDelCierre;
+    }
+
+    /**
+     * Determina el estado actual del flujo basado en la intención
+     */
+    #[Computed]
+    public function estado()
+    {
+        if (!$this->isActivo) {
+            return 'inactivo';
+        }
+
+        $intencion = (int) ($this->invitacion->intencion ?? 0);
+
+        return match ($intencion) {
+            0 => 'pendiente',
+            1 => $this->obligatorios_completos 
+                ? ($this->documentacion_completa ? 'listo_completo' : 'listo_parcial') 
+                : 'falta_obligatorios',
+            2 => 'rechazado',
+            3 => 'presentado',
+            default => 'inactivo',
+        };
+    }
+
+    /**
+     * Actualiza la intención de participación y redirige para refrescar el layout
+     */
+    public function updateIntention($value)
+    {
         try {
-            $this->checkDocumentacionFromApi();
-            // Debug log
-            /* Log::info('Documentación check result', [
-                'concurso_id' => $this->concurso->id ?? 'unknown',
-                'completa' => $this->documentacion_completa,
-                'intencion' => $this->invitacion->intencion ?? 'unknown'
-            ]); */
+            $user = Auth::user();
+            $token = session('jwt_token');
+            $api = new ConcursosApiService($token, $user->username);
+
+            if ($api->cambiarIntencion($this->concurso->id, $value)) {
+                session()->flash('success', 'Intención actualizada correctamente.');
+                return redirect()->route('concursos.show', $this->concurso->id);
+            }
+
+            $this->addError('intencion', 'No se pudo actualizar la intención.');
         } catch (\Exception $e) {
-            Log::error('Error checking documentation', [
-                'error' => $e->getMessage(),
-                'concurso_id' => $this->concurso->id ?? 'unknown'
-            ]);
+            Log::error('Error updating intention', ['error' => $e->getMessage()]);
+            $this->addError('intencion', 'Error de conexión con el servidor.');
+        }
+    }
+
+    public function iniciarRechazo()
+    {
+        $this->mostrando_motivo = true;
+        $this->motivo_seleccionado = '';
+        $this->motivo_texto = '';
+        $this->resetErrorBag('motivo');
+    }
+
+    public function confirmarRechazo()
+    {
+        $this->validate([
+            'motivo_seleccionado' => 'required',
+            'motivo_texto' => $this->motivo_seleccionado === 'otro' ? 'required|string|max:950' : 'nullable',
+        ], [
+            'motivo_seleccionado.required' => 'Debe seleccionar un motivo.',
+            'motivo_texto.required' => 'Debe escribir el motivo.',
+            'motivo_texto.max' => 'El motivo no puede superar los 950 caracteres.',
+        ]);
+
+        $observaciones = $this->motivo_seleccionado === 'otro'
+            ? 'Otros: ' . trim($this->motivo_texto)
+            : $this->motivo_seleccionado;
+
+        try {
+            $user = Auth::user();
+            $api = new ConcursosApiService(session('jwt_token'), $user->username);
+
+            try {
+                $api->darBajaOferta($this->concurso->id);
+            } catch (\Exception $e) {
+                Log::warning('Borrado de archivos al rechazar falló o no era necesario', ['error' => $e->getMessage()]);
+            }
+
+            if ($api->cambiarIntencion($this->concurso->id, 2, $observaciones)) {
+                session()->flash('success', 'Intención actualizada correctamente.');
+                return redirect()->route('concursos.show', $this->concurso->id);
+            }
+
+            $this->addError('motivo', 'No se pudo actualizar la intención.');
+        } catch (\Exception $e) {
+            Log::error('Error al confirmar rechazo', ['error' => $e->getMessage()]);
+            $this->addError('motivo', 'Error de conexión con el servidor.');
+        }
+    }
+    public function checkDocumentacion()
+    {
+        try {
+            $tipos = collect($this->getTiposDocumentosOferta());
+
+            if ($tipos->isEmpty()) {
+                $this->documentacion_completa = true;
+                $this->obligatorios_completos = true;
+                return;
+            }
+
+            $analisis = $tipos->map(function ($tipo) {
+                $tieneArchivos = !empty($tipo['documentos_oferta']);
+                $tieneAsociacionValida = isset($tipo['tipo_documento_proveedor']['id']) && !is_null($tipo['tipo_documento_proveedor']['id']);
+                return [
+                    'cubierto' => $tieneArchivos || $tieneAsociacionValida,
+                    'obligatorio' => (bool) ($tipo['obligatorio'] ?? false)
+                ];
+            });
+
+            $faltanObligatorios = $analisis->where('obligatorio', true)->where('cubierto', false)->isNotEmpty();
+            $faltanOpcionales = $analisis->where('obligatorio', false)->where('cubierto', false)->isNotEmpty();
+
+            $this->obligatorios_completos = !$faltanObligatorios;
+            $this->documentacion_completa = !$faltanObligatorios && !$faltanOpcionales;
+
+        } catch (\Exception $e) {
+            Log::error('Error checking documentation', ['error' => $e->getMessage()]);
             $this->documentacion_completa = false;
             $this->obligatorios_completos = false;
         }
     }
 
-    /**
-     * Verificar documentación basándose en los tipos de documentos de oferta
-     */
-    private function checkDocumentacionFromApi()
-    {
-        $tipos = $this->getTiposDocumentosOferta();
-
-        // REGLA DE REUNIÓN: Si no se pide nada, está todo completo por definición.
-        if (empty($tipos)) {
-            $this->documentacion_completa = true;
-            $this->obligatorios_completos = true;
-            return;
-        }
-
-        // Si llegamos acá, HAY requerimientos. Por lo tanto, empezamos asumiendo que falta algo.
-        $faltanObligatorios = false;
-        $faltanOpcionales = false;
-
-        foreach ($tipos as $tipo) {
-            // Un ítem está cubierto si: tiene archivos OR asociación válida
-            $tieneArchivos = !empty($tipo['documentos_oferta']);
-            $tieneAsociacionValida = isset($tipo['tipo_documento_proveedor']['id']) && !is_null($tipo['tipo_documento_proveedor']['id']);
-            
-            $itemCubierto = $tieneArchivos || $tieneAsociacionValida;
-            $esObligatorio = (bool)($tipo['obligatorio'] ?? false);
-
-            if (!$itemCubierto) {
-                if ($esObligatorio) {
-                    $faltanObligatorios = true;
-                } else {
-                    $faltanOpcionales = true;
-                }
-            }
-        }
-
-        // RESULTADO FINAL
-        // No puede estar completa si falta CUALQUIER cosa (obligatoria o no)
-        $this->documentacion_completa = !$faltanObligatorios && !$faltanOpcionales;
-        
-        // Lo único que bloquea la presentación es la falta de obligatorios
-        $this->obligatorios_completos = !$faltanObligatorios;
-    }
-
-    /**
-     * Obtener tipos de documentos de oferta
-     */
     private function getTiposDocumentosOferta()
     {
-        // Si ya están cargados en el concurso, usarlos
         if (isset($this->concurso->tipos_documentos_oferta)) {
             return $this->concurso->tipos_documentos_oferta;
         }
 
-        // Si no, cargarlos desde la API
         try {
-            $user = Auth::user();
-            $token = session('jwt_token');
-            $api = new \App\Services\ConcursosApiService($token, $user->username);
+            $api = new ConcursosApiService(session('jwt_token'), Auth::user()->username);
             return $api->getTiposDocumentosOferta($this->concurso->id) ?? [];
         } catch (\Exception $e) {
-            Log::error('Error getting tipos documentos oferta', [
-                'error' => $e->getMessage(),
-                'concurso_id' => $this->concurso->id ?? 'unknown'
-            ]);
             return [];
         }
     }
 
-    /**
-     * Determinar el estado actual del botón principal
-     */
-    public function getEstadoBoton()
-    {
-        $intencion = $this->invitacion->intencion ?? 0;
-        
-        // Si el concurso no está activo o ya pasó la fecha de cierre
-        if (!$this->concurso_activo || !$this->antes_del_cierre) {
-            return 'inactivo';
-        }
-
-        // Estados según intención
-        switch ($intencion) {
-            case 0: // Sin intención definida
-                return 'participar';
-            
-            case 1: // Con intención de participar
-                if ($this->documentacion_completa && $this->obligatorios_completos) {
-                    return 'presentar_oferta_completa';
-                } elseif (!$this->obligatorios_completos) {
-                    return 'falta_documentacion_obligatoria';
-                } else {
-                    return 'presentar_oferta_faltante';
-                }
-            
-            case 2: // Intención rechazada
-                return 'arrepentimiento';
-            
-            case 3: // Oferta presentada
-                return 'oferta_presentada';
-            
-            default:
-                return 'inactivo';
-        }
-    }
-
-    /**
-     * Determinar si se debe mostrar el modal
-     */
-    public function getMostrarModal()
-    {
-        $estado = $this->getEstadoBoton();
-        return in_array($estado, ['participar', 'presentar_oferta_completa', 'presentar_oferta_faltante', 'arrepentimiento', 'oferta_presentada']);
-    }
-
-    /**
-     * Dar de baja la oferta
-     */
     public function darBajaOferta()
     {
-        if (!$this->puedeDarBaja()) {
-            $this->addError('baja', 'No se puede dar de baja la oferta.');
+        if ($this->isCerrado() || ($this->invitacion->intencion ?? 0) != 3) {
+            $this->addError('baja', 'Acción no permitida.');
             return;
         }
 
-        if ($this->concursoCerrado()) {
-            $this->addError('baja', 'No se puede dar de baja la oferta de un concurso cerrado.');
-            return;
-        }
-
-        if (empty($this->password)) {
-            $this->addError('password', 'Debe ingresar su contraseña para confirmar la acción.');
-            return;
-        }
-
-        // Validar la contraseña del usuario autenticado
-        if (!\Illuminate\Support\Facades\Hash::check($this->password, \Illuminate\Support\Facades\Auth::user()->password)) {
-            $this->addError('password', 'La contraseña ingresada es incorrecta.');
-            return;
-        }
+        $this->validate([
+            'password' => ['required', function ($attribute, $value, $fail) {
+                if (!Hash::check($value, Auth::user()->password)) {
+                    $fail('La contraseña ingresada es incorrecta.');
+                }
+            }],
+        ]);
 
         $this->dando_baja = true;
 
         try {
-            $user = Auth::user();
-            $token = session('jwt_token');
-            $api = new ConcursosApiService($token, $user->username);
-            
-            $success = $api->darBajaOferta($this->concurso->id);
-
-            if ($success) {
-                Log::info('Oferta dada de baja exitosamente', [
-                    'user_id' => Auth::id(),
-                    'concurso_id' => $this->concurso->id
-                ]);
-
+            $api = new ConcursosApiService(session('jwt_token'), Auth::user()->username);
+            if ($api->darBajaOferta($this->concurso->id)) {
                 $this->open = false;
-                $this->dando_baja = false;
-                $this->password = '';
-                
-                $this->dispatch('oferta-dada-baja', [
-                    'concurso_id' => $this->concurso->id
-                ]);
-
-                session()->flash('success', 'Oferta dada de baja correctamente. Todos los documentos han sido eliminados.');
-            } else {
-                Log::error('Error al dar de baja la oferta', [
-                    'user_id' => Auth::id(),
-                    'concurso_id' => $this->concurso->id
-                ]);
-
-                $this->addError('baja', 'Error al dar de baja la oferta. Intente nuevamente.');
+                session()->flash('success', 'Oferta dada de baja correctamente.');
+                return redirect()->route('concursos.show', $this->concurso->id);
             }
-
+            $this->addError('baja', 'Error al dar de baja la oferta.');
         } catch (\Exception $e) {
-            Log::error('Excepción al dar de baja la oferta', [
-                'user_id' => Auth::id(),
-                'concurso_id' => $this->concurso->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            $this->addError('baja', 'Error temporal del sistema. Intente nuevamente.');
+            $this->addError('baja', 'Error de comunicación con el servidor.');
+        } finally {
+            $this->dando_baja = false;
         }
-
-        $this->dando_baja = false;
     }
 
-    /**
-     * Verificar si el concurso está cerrado
-     */
-    private function concursoCerrado()
+    private function isCerrado()
     {
-        if (!$this->concurso) {
-            return true;
-        }
-
-        if (isset($this->concurso->estado) && is_array($this->concurso->estado)) {
-            if (isset($this->concurso->estado['id']) && $this->concurso->estado['id'] == 3) {
-                return true;
-            }
-        }
+        $estadoId = is_array($this->concurso->estado) ? ($this->concurso->estado['id'] ?? 0) : ($this->concurso->estado->id ?? 0);
+        if ($estadoId == 3) return true;
 
         if (isset($this->concurso->fecha_cierre)) {
-            $fechaCierre = is_string($this->concurso->fecha_cierre) 
-                ? Carbon::parse($this->concurso->fecha_cierre)
-                : $this->concurso->fecha_cierre;
-            
-            if (now()->gte($fechaCierre)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Verificar si puede dar de baja la oferta
-     */
-    private function puedeDarBaja()
-    {
-        if ($this->concursoCerrado()) {
-            return false;
-        }
-
-        if ($this->invitacion && isset($this->invitacion->intencion)) {
-            return $this->invitacion->intencion == 3;
+            return now()->gte(Carbon::parse($this->concurso->fecha_cierre));
         }
 
         return false;

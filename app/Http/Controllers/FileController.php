@@ -293,7 +293,6 @@ class FileController extends Controller
             'file' => [
                 'required',
                 'file',
-                'mimes:pdf',
                 'max:10240', // 10MB
                 function ($attribute, $value, $fail) {
                     // ✅ Validar que el archivo no esté corrupto
@@ -350,7 +349,7 @@ class FileController extends Controller
     {
         // 1. Validación clásica
         $request->validate([
-            'file' => 'required|file|mimes:pdf|max:10240',
+            'file' => 'required|file|max:10240',
             'documento_tipo_id' => 'required',
             'vencimiento' => 'nullable|date',
         ]);
@@ -384,7 +383,7 @@ class FileController extends Controller
     public function uploadApoderado(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|mimes:pdf|max:10240',
+            'file' => 'required|file|max:10240',
             'tipo' => 'required|in:apoderado,representante',
             'nombre' => 'required_if:tipo,representante|nullable|string',
             'vencimiento' => 'nullable|date',
@@ -415,7 +414,7 @@ class FileController extends Controller
     public function uploadConcursoFile(Request $request, $concursoId)
     {
         $request->validate([
-            'file' => 'required|file|mimes:pdf|max:10240',
+            'file' => 'required|file|max:10240',
             'documento_tipo_id' => 'nullable', // Permitimos que venga vacío
         ]);
 

@@ -27,22 +27,22 @@ class ProveedorApiService
      */
     public function getProveedor(): ?object
     {
-        Log::info('API Request Debug', [
+        /* Log::info('API Request Debug', [
             'url' => "{$this->apiUrl}/api/proveedores/{$this->cuit}",
             'token' => $this->token,
             'token_length' => strlen($this->token ?? ''),
             'cuit' => $this->cuit,
-        ]);
+        ]); */
         
         $response = Http::withToken($this->token)
             ->get("{$this->apiUrl}/api/proveedores/{$this->cuit}");
 
-Log::info('API Response Debug', [
+        /* Log::info('API Response Debug', [
             'status' => $response->status(),
             'headers' => $response->headers(),
             'body_preview' => substr($response->body(), 0, 500),
             'successful' => $response->successful(),
-        ]);
+        ]); */
 
 
 // Si el token expir� (401), intentamos renovarlo una vez
@@ -55,12 +55,12 @@ Log::info('API Response Debug', [
         }
     }
         
-        Log::info('API Response Debug', [
+        /* Log::info('API Response Debug', [
             'status' => $response->status(),
             'headers' => $response->headers(),
             'body_preview' => substr($response->body(), 0, 500),
             'successful' => $response->successful(),
-        ]);
+        ]); */
         
         if ($response->successful()) {
             return (object) ($response->json('data') ?? []);

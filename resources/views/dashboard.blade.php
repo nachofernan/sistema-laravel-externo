@@ -1,5 +1,43 @@
 <x-app-layout>
     <div class="w-full xl:w-10/12 mb-12 xl:mb-0 px-4 mx-auto mt-4 pb-10">
+
+        @if (session('success'))
+            <div x-data="{ open: true }" x-show="open" class="mb-4 rounded-lg border border-green-300 bg-green-50 p-5">
+                <div class="flex items-start gap-4">
+                    <div class="shrink-0 mt-0.5">
+                        <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-base font-semibold text-green-800">{{ session('success') }}</p>
+                        <p class="mt-1 text-sm text-green-700">
+                            El documento fue recibido correctamente y será revisado por el área de Legales. Una vez que sea aprobado, aparecerá en su legajo. Este proceso puede demorar algunos días hábiles.
+                        </p>
+                    </div>
+                    <button @click="open = false" class="shrink-0 text-green-500 hover:text-green-800 text-xl font-bold leading-none" aria-label="Cerrar">&times;</button>
+                </div>
+            </div>
+        @endif
+
+        @if (session('error'))
+            <div x-data="{ open: true }" x-show="open" class="mb-4 rounded-lg border border-red-300 bg-red-50 p-5">
+                <div class="flex items-start gap-4">
+                    <div class="shrink-0 mt-0.5">
+                        <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                        </svg>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-base font-semibold text-red-800">{{ session('error') }}</p>
+                        <p class="mt-1 text-sm text-red-700">
+                            Por favor intente nuevamente. Si el problema persiste, comuníquese con el área de Compras.
+                        </p>
+                    </div>
+                    <button @click="open = false" class="shrink-0 text-red-500 hover:text-red-800 text-xl font-bold leading-none" aria-label="Cerrar">&times;</button>
+                </div>
+            </div>
+        @endif
         <div
             class="relative flex flex-col min-w-0 break-words bg-white w-full mb-6 shadow-lg rounded-lg overflow-hidden">
             <div class="bg-gradient-to-r from-blue-700 to-blue-400 p-6">
@@ -110,16 +148,15 @@
                                     <div class="bg-white shadow rounded-lg p-4 mb-2">
                                         <div class="flex justify-between items-center">
                                             <div class="flex-1">
-                                                <span class="font-semibold text-gray-700">{{ $doc->nombre }}</span>
+                                                <div>
+                                                    <span class="font-semibold text-gray-700">{{ $doc->nombre }}</span>
+                                                </div>
                                                 @if ($doc->vencimiento)
                                                     <div class="text-sm text-gray-500 mt-1">
                                                         Vencimiento:
                                                         {{ \Carbon\Carbon::parse($doc->vencimiento)->format('d/m/Y') }}
                                                         @if (\Carbon\Carbon::parse($doc->vencimiento)->isPast())
                                                             <span class="text-red-600 font-medium">(Vencido)</span>
-                                                        {{-- @elseif (\Carbon\Carbon::parse($doc->vencimiento)->diffInDays(now()) <= 30)
-                                                            <span class="text-orange-600 font-medium">(Por
-                                                                vencer)</span> --}}
                                                         @endif
                                                     </div>
                                                 @endif
@@ -216,8 +253,7 @@
                                             <div
                                                 class="bg-white shadow rounded-lg p-4 mb-2 flex justify-between items-center">
                                                 <div>
-                                                    <span
-                                                        class="font-semibold">{{ $rep->nombre ?? 'Sin nombre' }}</span>
+                                                    <span class="font-semibold">{{ $rep->nombre ?? 'Sin nombre' }}</span>
                                                 </div>
                                                 <form action="{{ route('file.download-proveedor-documento') }}"
                                                     method="POST">

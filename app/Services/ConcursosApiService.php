@@ -96,7 +96,7 @@ class ConcursosApiService
      * Cambiar intención de participación
      * Según documentación: PATCH /api/concursos/{concurso_id}/invitacion
      */
-    public function cambiarIntencion(int $concursoId, int $intencion): bool
+    public function cambiarIntencion(int $concursoId, int $intencion, ?string $observaciones = null): bool
     {
         Log::info('API Request Debug - Cambiar Intención', [
             'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/invitacion",
@@ -104,11 +104,14 @@ class ConcursosApiService
             'token' => $this->token,
             'token_length' => strlen($this->token ?? ''),
         ]);
-        
+
+        $payload = ['intencion' => $intencion];
+        if ($intencion === 2 && !empty($observaciones)) {
+            $payload['observaciones'] = $observaciones;
+        }
+
         $response = Http::withToken($this->token)
-            ->patch("{$this->apiUrl}/api/concursos/{$concursoId}/invitacion", [
-                'intencion' => $intencion
-            ]);
+            ->patch("{$this->apiUrl}/api/concursos/{$concursoId}/invitacion", $payload);
         
         Log::info('API Response Debug - Cambiar Intención', [
             'status' => $response->status(),

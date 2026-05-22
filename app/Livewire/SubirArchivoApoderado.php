@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Services\ProveedorApiService;
 use Livewire\WithFileUploads;
 use Livewire\Component;
+use Illuminate\Support\Facades\Log;
 
 class SubirArchivoApoderado extends Component
 {
@@ -26,6 +27,11 @@ class SubirArchivoApoderado extends Component
 
     public function submit()
     {
+        Log::info('SubirArchivoApoderado submit', [
+            'tipo' => $this->tipo,
+            'nombre' => $this->nombre,
+            'vencimiento' => $this->vencimiento,
+        ]);
         $this->validate([
             'file' => 'required|file|mimes:pdf|max:5120',
             'tipo' => 'required|in:apoderado,representante',

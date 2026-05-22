@@ -1,0 +1,83 @@
+CAMBIOS EN LA API — RECHAZO DE CONCURSO CON MOTIVO
+====================================================
+
+El endpoint de cambio de intención fue actualizado para soportar un motivo
+de rechazo cuando el proveedor no va a participar.
+
+ENDPOINT
+--------
+PATCH /api/concursos/{concurso_id}/invitacion
+Header: Authorization: Bearer {jwt_token}
+Content-Type: application/json
+
+
+CAMPO NUEVO: observaciones
+--------------------------
+- Tipo: string, máximo 1000 caracteres
+- Cuándo enviarlo: cuando intencion == 2 (no participa)
+- Es opcional por ahora — si no viene, el backend guarda null sin error
+- Si viene vacío (""), el backend también lo guarda como null
+
+La app debe construir el string final antes de enviarlo. El flujo típico
+sería un select con opciones predefinidas + un input de texto libre si
+el usuario elige "Otra razón". El string resultante se manda completo
+en el campo observaciones.
+
+Ejemplos:
+  "No tenemos capacidad en este período"
+  "Plazos incompatibles con nuestra operación"
+  "Otra razón: el precio de referencia está por debajo de nuestros costos"
+
+
+EJEMPLOS DE REQUEST
+-------------------
+
+Rechazo con motivo:
+{
+  "intencion": 2,
+  "observaciones": "No tenemos capacidad productiva en este período"
+}
+
+Rechazo sin motivo (sigue funcionando durante la transición):
+{
+  "intencion": 2
+}
+
+Cambio a otra intención (limpia observaciones automáticamente):
+{
+  "intencion": 1
+}
+
+
+CAMPO NUEVO EN LA RESPUESTA DE INVITACION
+-----------------------------------------
+El recurso InvitacionResource ahora incluye el campo observaciones.
+Aparece en cualquier endpoint que devuelva una invitación.
+
+{
+  "id": 42,
+  "concurso_id": 5,
+  "proveedor_id": 18,
+  "intencion": 2,
+  "observaciones": "No tenemos capacidad productiva en este período",
+  "fecha_envio": "2026-05-01",
+  ...
+}
+
+Si no hay observaciones, el campo viene como null.
+
+
+VALIDACIÓN DEL BACKEND
+-----------------------
+- intencion: requerido, entero, valores válidos: 0, 1, 2, 3
+- observaciones: opcional, string, máximo 1000 caracteres
+- Si se envía observaciones con intencion != 2, se ignora y se guarda null
+
+
+NOTAS DE IMPLEMENTACIÓN
+-----------------------
+- No hay endpoint separado para obtener la lista de motivos — los textos
+  van hardcodeados en la app
+- El string puede ser libre (no se valida contra una lista fija)
+- La app puede mostrar los motivos que esté definiendo el directorio y
+  actualizar esa lista en futuras versiones de la app sin cambios en el backend
