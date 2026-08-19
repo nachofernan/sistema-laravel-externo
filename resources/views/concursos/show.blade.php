@@ -99,7 +99,7 @@
                                     <div class="flex justify-between border-b pb-2">
                                         <dt class="font-medium text-gray-600">Fecha Inicio</dt>
                                         <dd class="text-gray-800">
-                                            {{ \Carbon\Carbon::parse($concursoObj->fecha_inicio)->format('d-m-Y - H:i') }}
+                                            {{ \Carbon\Carbon::parse($concursoObj->fecha_inicio)->format('d-m-Y - h:i A') }}
                                         </dd>
                                     </div>
                                 @endif
@@ -108,7 +108,7 @@
                                     <div class="flex justify-between border-b pb-2">
                                         <dt class="font-medium text-gray-600">Fecha Cierre</dt>
                                         <dd class="text-gray-800">
-                                            {{ \Carbon\Carbon::parse($concursoObj->fecha_cierre)->format('d-m-Y - H:i') }}
+                                            {{ \Carbon\Carbon::parse($concursoObj->fecha_cierre)->format('d-m-Y - h:i A') }}
                                         </dd>
                                     </div>
                                 @endif
@@ -123,9 +123,9 @@
                                         <div class="flex justify-between items-center px-4">
                                             <span class="font-medium">Prórroga {{ $key + 1 }}</span>
                                             <div class="text-xs text-gray-600">
-                                                {{ \Carbon\Carbon::parse($prorrogaObj->fecha_anterior)->format('d-m-Y - H:i') }}
+                                                {{ \Carbon\Carbon::parse($prorrogaObj->fecha_anterior)->format('d-m-Y - h:i A') }}
                                                 <span class="mx-2">➔</span>
-                                                {{ \Carbon\Carbon::parse($prorrogaObj->fecha_actual)->format('d-m-Y - H:i') }}
+                                                {{ \Carbon\Carbon::parse($prorrogaObj->fecha_actual)->format('d-m-Y - h:i A') }}
                                             </div>
                                         </div>
                                     @endforeach
@@ -367,7 +367,7 @@
                                                                                     }}
                                                                                 </div>
                                                                                 <div class="text-xs text-gray-500">
-                                                                                    {{ \Carbon\Carbon::parse($docOfertaObj->created_at)->format('d-m-Y H:i') }}
+                                                                                    {{ \Carbon\Carbon::parse($docOfertaObj->created_at)->format('d-m-Y h:i A') }}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
@@ -492,7 +492,7 @@
                                                                                     }}
                                                                                 </div>
                                                                                 <div class="text-xs text-gray-500">
-                                                                                    {{ \Carbon\Carbon::parse($docAdicionalObj->created_at)->format('d-m-Y H:i') }}
+                                                                                    {{ \Carbon\Carbon::parse($docAdicionalObj->created_at)->format('d-m-Y h:i A') }}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
@@ -545,7 +545,7 @@
                                                                                     }}
                                                                                 </div>
                                                                                 <div class="text-xs text-gray-500">
-                                                                                    {{ \Carbon\Carbon::parse($docEmpresaObj->created_at)->format('d-m-Y H:i') }}
+                                                                                    {{ \Carbon\Carbon::parse($docEmpresaObj->created_at)->format('d-m-Y h:i A') }}
                                                                                     @if (isset($docEmpresaObj->creador) && $docEmpresaObj->creador)
                                                                                         - {{ $docEmpresaObj->creador->name ?? 'Empresa' }}
                                                                                     @endif
