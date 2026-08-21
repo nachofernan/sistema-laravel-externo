@@ -7,8 +7,8 @@ namespace App\Livewire\Auth;
 use App\Mail\PasswordResetMail;
 use App\Mail\TemporaryPasswordMail;
 use App\Models\LoginAttempt;
-use App\Models\Proveedores\Proveedor;
 use App\Models\User;
+use App\Services\ProveedorApiService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -102,15 +102,15 @@ class ProgressiveLogin extends Component
         }
 
         // Buscar el correo actual del proveedor
-        $proveedor = Proveedor::on('proveedores')->where('cuit', $this->cuit)->first();
+        $proveedor = app(ProveedorApiService::class)->validateProvider($this->cuit);
         if (! $proveedor) {
             $this->addError('general', 'Error interno al buscar el proveedor, contáctese con la empresa.');
 
             return;
         }
 
-        if ($user->email != $proveedor->correo) {
-            $user->email = $proveedor->correo;
+        if ($user->email != $proveedor['correo']) {
+            $user->email = $proveedor['correo'];
             $user->save();
         }
 
@@ -182,7 +182,7 @@ class ProgressiveLogin extends Component
         }
 
         // CASO 2: Buscar en proveedores internos
-        $proveedor = Proveedor::on('proveedores')->where('cuit', $this->cuit)->first();
+        $proveedor = app(ProveedorApiService::class)->validateProvider($this->cuit);
 
         if ($proveedor) {
             // Existe en base interna pero no como usuario
@@ -258,7 +258,7 @@ class ProgressiveLogin extends Component
         }
 
         // Buscar proveedor
-        $proveedor = Proveedor::on('proveedores')->where('cuit', $this->cuit)->first();
+        $proveedor = app(ProveedorApiService::class)->validateProvider($this->cuit);
 
         if (! $proveedor) {
             $this->logAttempt('register_request', 'failed', ['reason' => 'provider_not_found']);
@@ -282,12 +282,12 @@ class ProgressiveLogin extends Component
         $this->dispatch('focus-password');
     }
 
-    private function handleUserInternalOnly(Proveedor $proveedor)
+    private function handleUserInternalOnly(array $proveedor)
     {
         $this->step = 'user_internal_only';
         $this->logAttempt('check_user', 'found_internal');
 
-        $maskedEmail = $this->maskEmail($proveedor->correo);
+        $maskedEmail = $this->maskEmail($proveedor['correo']);
         $this->showMessage('info', "Su CUIT está registrado en nuestro sistema. Puede solicitar una contraseña provisoria que será enviada a {$maskedEmail}");
     }
 
@@ -301,15 +301,15 @@ class ProgressiveLogin extends Component
 
     // === MÉTODOS DE APOYO ===
 
-    private function createUserForProvider(Proveedor $proveedor)
+    private function createUserForProvider(array $proveedor)
     {
         $temporaryPassword = Str::random(10);
 
         try {
             $user = User::create([
-                'name' => $proveedor->razonsocial,
+                'name' => $proveedor['razonsocial'],
                 'username' => $this->cuit,
-                'email' => $proveedor->correo,
+                'email' => $proveedor['correo'],
                 'password' => Hash::make($temporaryPassword),
                 'email_verified_at' => now(),
                 'must_change_password' => true,
@@ -318,11 +318,11 @@ class ProgressiveLogin extends Component
                 'registration_ip' => request()->ip(),
             ]);
 
-            $maskedEmail = $this->maskEmail($proveedor->correo);
+            $maskedEmail = $this->maskEmail($proveedor['correo']);
 
             // Enviar email solo a dominios autorizados
             if (app()->environment('production') || str_ends_with($user->email, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
-                Mail::to($proveedor->correo)->send(new TemporaryPasswordMail($temporaryPassword));
+                Mail::to($proveedor['correo'])->send(new TemporaryPasswordMail($temporaryPassword));
             }
 
             $this->logAttempt('register_request', 'success', [

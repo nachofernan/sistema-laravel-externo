@@ -28,8 +28,10 @@ Este documento describe la API RESTful para la gestión de proveedores y concurs
 - **POST** `/api/validate-provider`
 - **Body:**
   - `{ "cuit": "string" }`
-- **Respuesta:**
-  - `{ "success": true, "data": { ... } }`
+- **Respuesta (200, proveedor encontrado):**
+  - `{ "exists": true, "proveedor": { "id": ..., "cuit": "...", "razonsocial": "...", "correo": "...", "estado": ... } }`
+- **Respuesta (404, no encontrado):**
+  - `{ "exists": false, "message": "Proveedor no encontrado" }`
 
 ---
 

@@ -38,23 +38,29 @@ RS256 (par asimétrico) donde esta app solo tenga la clave **pública** de verif
 
 `config/database.php` configura conexiones MySQL completas a `proveedores` y `concursos`, con
 credenciales propias en `.env` (`DB_USERNAME_PROVEEDORES`, `DB_PASSWORD_CONCURSOS`, etc.), y hay
-~20 modelos Eloquent (`app/Models/Proveedores/*`, `app/Models/Concursos/*`) que las usan. El único
-call site vivo en producción es `Proveedor::on('proveedores')->where('cuit', $cuit)->first()` en:
+~20 modelos Eloquent (`app/Models/Proveedores/*`, `app/Models/Concursos/*`) que las usan.
 
-- `app/Http/Controllers/Auth/ProgressiveLoginController.php:196`
-- `app/Http/Controllers/Auth/ProviderRegistrationController.php:37` (sin rutas activas hoy)
-- `app/Livewire/Auth/ProgressiveLogin.php:97,174,245` (componente sin montar hoy)
+**Estado (2026-08-21): cerrado el call site del login.** `app/Livewire/Auth/ProgressiveLogin.php`
+(que resultó ser el componente montado en `GET /login`, no un duplicado sin usar — ver V10) migró
+sus 3 puntos a `POST /api/validate-provider` vía `ProveedorApiService::validateProvider()`.
+`ProgressiveLoginController::checkCuitForRegistration`, que tenía el otro call site activo, se
+eliminó por completo (era un endpoint huérfano, ver V10).
+
+**Queda abierto:**
+- `app/Http/Controllers/Auth/ProviderRegistrationController.php:37` — sin rutas activas hoy
+  (comentadas en `routes/web.php`), pero el código y el call site siguen ahí.
+- Los ~20 modelos Eloquent de `Proveedores/`/`Concursos/` y las conexiones en
+  `config/database.php`/`.env` — no se borran hasta que no quede ningún call site.
 
 **Impacto:** contradice el modelo "esta app solo habla con el interno por API" y multiplica el radio
 de impacto de cualquier compromiso del proceso PHP: en vez de que un atacante quede limitado a lo
 que la API interna permite (rate-limited, con contrato y logging propio), obtiene credenciales SQL
-directas contra bases internas. La API interna ya expone `POST /api/validate-provider`
-(`docs/API_PROVEEDORES_CONCURSOS.md` §2.2) construido exactamente para este chequeo, y no se usa.
+directas contra bases internas.
 
-**Recomendación:** migrar los 4 call sites a `POST /api/validate-provider`; una vez migrados,
-eliminar las conexiones `proveedores`/`concursos` de `config/database.php` y sus credenciales del
-`.env` de este deployment, y borrar los modelos legacy sin uso (reducen la superficie de ataque y la
-confusión de cualquiera que lea el código pensando que reflejan el diseño actual).
+**Recomendación:** decidir si `ProviderRegistrationController` sigue teniendo motivo de existir
+(sus rutas ya están comentadas) o se borra entero; una vez sin call sites, eliminar las conexiones
+`proveedores`/`concursos` de `config/database.php` y sus credenciales del `.env`, y borrar los
+modelos legacy sin uso.
 
 ---
 
@@ -78,9 +84,13 @@ fecha.
 
 ### V4 — El JWT se loguea en texto plano en múltiples puntos
 
+**Estado (2026-08-21): cerrado en el login.** `ProgressiveLoginController::login` (el método
+completo) se eliminó por huérfano (ver V10); `ProgressiveLogin.php:343` ahora loguea
+`token_length` en vez del token.
+
+**Queda abierto:**
+
 ```
-app/Http/Controllers/Auth/ProgressiveLoginController.php:150  Log::info(..., ['token' => $token])
-app/Livewire/Auth/ProgressiveLogin.php:343                    Log::info(..., ['token' => $token])
 app/Http/Controllers/ConcursoController.php:39-42 y 112       Log::error(..., ['jwt_token' => $token, 'user' => $user])
 app/Http/Controllers/ProveedorController.php:35                Log::error(..., ['jwt_token' => $token, 'user' => $user])
 app/Services/ConcursosApiService.php   (~10 llamadas)          Log::info('API Request Debug...', ['token' => $this->token, ...])
@@ -92,9 +102,8 @@ proveedores contra la API interna mientras el token no expire (~10 minutos, pero
 antes de vencer mientras la sesión esté activa, así que el log puede quedar con una cadena continua
 de tokens válidos a lo largo de una sesión larga).
 
-**Recomendación:** eliminar el valor del token de todos los `Log::*`; si hace falta debuggear,
-loguear como mucho su longitud (`strlen($token)`, que ya se hace en paralelo en varios de estos
-mismos logs) o un hash truncado, nunca el valor.
+**Recomendación:** eliminar el valor del token de todos los `Log::*` que quedan; si hace falta
+debuggear, loguear como mucho su longitud (`strlen($token)`) o un hash truncado, nunca el valor.
 
 ---
 
@@ -166,11 +175,17 @@ Laravel sepa que la conexión es segura).
 ### V10 — Código muerto que aumenta la superficie y la confusión
 
 - ~20 modelos Eloquent de `Proveedores/`/`Concursos/` sin ningún call site real (ver V2).
-- `app/Livewire/Auth/ProgressiveLogin.php` no está montado en ninguna vista, pero duplica —con su
-  propio rate limiting y su propio logging de token (ver V4)— la lógica de
-  `ProgressiveLoginController`. Riesgo: si algún día se corrige algo de seguridad en el controller
-  activo y no en este componente, y alguien lo monta más adelante sin revisar, vuelve el bug ya
-  corregido.
+- **Corrección (2026-08-21):** una entrada anterior de este documento decía que
+  `app/Livewire/Auth/ProgressiveLogin.php` no estaba montado en ninguna vista. Era al revés:
+  verificado por ruta (`GET /login` → `ProgressiveLoginController::showLoginForm` → vista
+  `auth.progressive-login`, que es únicamente `@livewire('auth.progressive-login')`), el componente
+  Livewire **es** el login real en producción. Los que estaban muertos eran los tres métodos de
+  `ProgressiveLoginController` (`checkUser`, `login`, `checkCuitForRegistration`) y sus rutas
+  `POST /auth/check-user`, `/auth/login`, `/auth/check-registration`: registrados como públicos, sin
+  auth, duplicando la lógica del componente activo (su propio rate limiting, su propio logueo de
+  token, su propio acceso directo a `proveedores`), pero sin ningún consumidor en el frontend
+  (confirmado por grep sobre `resources/js` y `resources/views`). Alcanzables igual por URL directa.
+  Se eliminaron (métodos, rutas y el logueo de JWT que tenían — ver V2, V4).
 - `ConcursoController::index()` llama `$this->testArrayToObjectRecursive()` en **cada** carga de
   `/concursos` — un método de prueba que solo genera datos ficticios y los loguea. Ruido y trabajo
   de más en cada request real.
@@ -189,6 +204,26 @@ son públicos), pero infla `storage/logs` con PII sin necesidad real de debuggin
 se envía si el destinatario es `@buenosairesenergia.com.ar` o `nachofernan@gmail.com`. Restringe en
 vez de abrir envíos (no es una vulnerabilidad), pero es un resabio de testing que vale la pena
 limpiar/documentar cuando se consolide el flujo de emails.
+
+### V13 — 2FA de Fortify disponible pero nunca consultado por el login progresivo
+
+`config/fortify.php` tiene `Features::twoFactorAuthentication()` habilitado, y el perfil de usuario
+(`resources/views/profile/show.blade.php`) permite activarlo. Pero
+`app/Livewire/Auth/ProgressiveLogin.php::attemptLogin()` no consulta
+`two_factor_secret`/`two_factor_confirmed_at` antes de hacer `Auth::login()` — el pipeline de
+autenticación de Fortify (`Fortify::authenticateUsing`) no está sobreescrito para el login por CUIT.
+Un proveedor que activara 2FA en su perfil quedaría con una falsa sensación de protección: el login
+progresivo lo deja entrar sin pedirle el segundo factor.
+
+**Estado:** confirmado con el dueño del proyecto que 2FA no se usa hoy en la práctica (nadie lo
+activó). No es explotable activamente porque no hay ningún usuario con 2FA activado que dependa de
+él, pero es una brecha silenciosa: si algún proveedor lo activara mañana, no se aplicaría.
+
+**Recomendación:** no es urgente mientras no se use. Si en algún momento se decide aprovechar el
+2FA de Fortify para proveedores externos, integrar el chequeo al `attemptLogin()` del login
+progresivo antes de dar por buena la sesión; si se decide que 2FA es para otro caso de uso (ej.
+personal interno) y no aplica a proveedores por CUIT, desactivar el feature explícitamente en vez de
+dejarlo disponible sin efecto.
 
 ---
 
