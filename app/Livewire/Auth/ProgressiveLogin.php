@@ -1,38 +1,45 @@
 <?php
+
 // app/Livewire/Auth/ProgressiveLogin.php
+
 namespace App\Livewire\Auth;
 
 use App\Mail\PasswordResetMail;
+use App\Mail\TemporaryPasswordMail;
 use App\Models\LoginAttempt;
 use App\Models\Proveedores\Proveedor;
 use App\Models\User;
-use App\Mail\TemporaryPasswordMail;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
 class ProgressiveLogin extends Component
 {
     public string $cuit = '';
+
     public string $password = '';
+
     public string $step = 'initial'; // initial, loading, user_found, user_internal_only, user_not_found
+
     public array $message = ['type' => '', 'text' => ''];
 
     // Propiedades para el modal de recuperación
     public bool $showPasswordRecoveryModal = false;
+
     public string $recoveryCuit = '';
+
     public bool $recoveryEmailSent = false;
 
     protected $rules = [
         'cuit' => 'required|string|min:8|max:15|regex:/^[0-9]+$/',
         'password' => 'nullable|string|min:6',
-        'recoveryCuit' => 'required|string|min:8|max:15|regex:/^[0-9]+$/'
+        'recoveryCuit' => 'required|string|min:8|max:15|regex:/^[0-9]+$/',
     ];
 
     protected $messages = [
@@ -44,7 +51,7 @@ class ProgressiveLogin extends Component
         'recoveryCuit.required' => 'El CUIT es obligatorio.',
         'recoveryCuit.regex' => 'El CUIT debe contener solo números.',
         'recoveryCuit.min' => 'El CUIT debe tener al menos 8 dígitos.',
-        'recoveryCuit.max' => 'El CUIT debe tener máximo 15 dígitos.'
+        'recoveryCuit.max' => 'El CUIT debe tener máximo 15 dígitos.',
     ];
 
     public function mount()
@@ -87,20 +94,22 @@ class ProgressiveLogin extends Component
         // Usar el CUIT que ya tenemos del paso anterior
         $user = User::where('username', $this->cuit)->first();
 
-        if (!$user) {
+        if (! $user) {
             // Esto no debería pasar, pero por seguridad
             $this->addError('general', 'Error interno. Intente nuevamente.');
-            return;
-        }
-        
-        // Buscar el correo actual del proveedor
-        $proveedor = Proveedor::on('proveedores')->where('cuit', $this->cuit)->first();
-        if (!$proveedor) {
-            $this->addError('general', 'Error interno al buscar el proveedor, contáctese con la empresa.');
+
             return;
         }
 
-        if($user->email != $proveedor->correo) {
+        // Buscar el correo actual del proveedor
+        $proveedor = Proveedor::on('proveedores')->where('cuit', $this->cuit)->first();
+        if (! $proveedor) {
+            $this->addError('general', 'Error interno al buscar el proveedor, contáctese con la empresa.');
+
+            return;
+        }
+
+        if ($user->email != $proveedor->correo) {
             $user->email = $proveedor->correo;
             $user->save();
         }
@@ -110,36 +119,36 @@ class ProgressiveLogin extends Component
 
         // Guardar el token en la base de datos
         DB::table('password_reset_tokens')->where('email', $user->email)->delete();
-        
+
         DB::table('password_reset_tokens')->insert([
             'email' => $user->email,
             'token' => Hash::make($token),
             'username' => $user->username,
-            'created_at' => Carbon::now()
+            'created_at' => Carbon::now(),
         ]);
 
         // Enviar el email con el link de reseteo
         try {
-            if(app()->environment('production') || str_ends_with($user->email, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
+            if (app()->environment('production') || str_ends_with($user->email, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
                 Mail::to([$user->email])->send(new PasswordResetMail($token, $user));
             }
 
             $this->logAttempt('password_recovery', 'success', [
                 'user_id' => $user->id,
-                'email_sent' => true
+                'email_sent' => true,
             ]);
 
             $this->recoveryEmailSent = true;
-            
+
             // Cerrar modal después de 2 segundos y mostrar mensaje
             $this->dispatch('recovery-email-sent');
 
         } catch (\Exception $e) {
             $this->logAttempt('password_recovery', 'failed', [
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             $this->addError('general', 'Error al enviar el correo. Intente nuevamente.');
         }
     }
@@ -149,11 +158,12 @@ class ProgressiveLogin extends Component
     {
         if (empty(trim($this->cuit))) {
             $this->showMessage('error', 'Por favor ingrese su CUIT.');
+
             return;
         }
 
         $this->validate(['cuit' => $this->rules['cuit']]);
-        
+
         if ($this->isRateLimited()) {
             return;
         }
@@ -167,6 +177,7 @@ class ProgressiveLogin extends Component
         if ($user) {
             // Usuario ya registrado - pedir contraseña
             $this->handleUserFound();
+
             return;
         }
 
@@ -176,6 +187,7 @@ class ProgressiveLogin extends Component
         if ($proveedor) {
             // Existe en base interna pero no como usuario
             $this->handleUserInternalOnly($proveedor);
+
             return;
         }
 
@@ -188,7 +200,7 @@ class ProgressiveLogin extends Component
     {
         $this->validate([
             'cuit' => 'required',
-            'password' => 'required'
+            'password' => 'required',
         ]);
 
         if ($this->isRateLimited('login')) {
@@ -200,8 +212,9 @@ class ProgressiveLogin extends Component
 
         $user = User::where('username', $this->cuit)->first();
 
-        if (!$user) {
+        if (! $user) {
             $this->handleFailedLogin('user_not_found');
+
             return;
         }
 
@@ -209,11 +222,13 @@ class ProgressiveLogin extends Component
             $this->logAttempt('login', 'blocked');
             $this->step = 'user_found';
             $this->showMessage('error', 'Usuario temporalmente bloqueado por seguridad. Intente más tarde.');
+
             return;
         }
 
-        if (!Hash::check($this->password, $user->password)) {
+        if (! Hash::check($this->password, $user->password)) {
             $this->handleFailedLogin('wrong_password', $user);
+
             return;
         }
 
@@ -238,16 +253,18 @@ class ProgressiveLogin extends Component
             $this->logAttempt('register_request', 'failed', ['reason' => 'user_exists']);
             $this->showMessage('error', 'Ya existe un usuario con este CUIT.');
             $this->resetToInitial();
+
             return;
         }
 
         // Buscar proveedor
         $proveedor = Proveedor::on('proveedores')->where('cuit', $this->cuit)->first();
 
-        if (!$proveedor) {
+        if (! $proveedor) {
             $this->logAttempt('register_request', 'failed', ['reason' => 'provider_not_found']);
             $this->showMessage('error', 'Error al procesar la solicitud.');
             $this->resetToInitial();
+
             return;
         }
 
@@ -269,7 +286,7 @@ class ProgressiveLogin extends Component
     {
         $this->step = 'user_internal_only';
         $this->logAttempt('check_user', 'found_internal');
-        
+
         $maskedEmail = $this->maskEmail($proveedor->correo);
         $this->showMessage('info', "Su CUIT está registrado en nuestro sistema. Puede solicitar una contraseña provisoria que será enviada a {$maskedEmail}");
     }
@@ -287,7 +304,7 @@ class ProgressiveLogin extends Component
     private function createUserForProvider(Proveedor $proveedor)
     {
         $temporaryPassword = Str::random(10);
-        
+
         try {
             $user = User::create([
                 'name' => $proveedor->razonsocial,
@@ -298,19 +315,19 @@ class ProgressiveLogin extends Component
                 'must_change_password' => true,
                 'status' => 'active',
                 'registered_at' => now(),
-                'registration_ip' => request()->ip()
+                'registration_ip' => request()->ip(),
             ]);
 
             $maskedEmail = $this->maskEmail($proveedor->correo);
 
             // Enviar email solo a dominios autorizados
-            if(app()->environment('production') || str_ends_with($user->email, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
+            if (app()->environment('production') || str_ends_with($user->email, '@buenosairesenergia.com.ar') || $user->email == 'nachofernan@gmail.com') {
                 Mail::to($proveedor->correo)->send(new TemporaryPasswordMail($temporaryPassword));
             }
 
             $this->logAttempt('register_request', 'success', [
                 'user_id' => $user->id,
-                'email_sent' => true
+                'email_sent' => true,
             ]);
 
             $this->resetToInitial();
@@ -329,7 +346,7 @@ class ProgressiveLogin extends Component
             'failed_login_attempts' => 0,
             'locked_until' => null,
             'last_login_at' => now(),
-            'last_login_ip' => request()->ip()
+            'last_login_ip' => request()->ip(),
         ]);
 
         Auth::login($user, true);
@@ -340,7 +357,7 @@ class ProgressiveLogin extends Component
         try {
             $token = app(\App\Http\Controllers\AuthController::class)->getNewToken();
             session(['jwt_token' => $token]);
-            Log::info('JWT token guardado en sesión (Livewire)', ['user_id' => $user->id, 'token' => $token]);
+            Log::info('JWT token guardado en sesión (Livewire)', ['user_id' => $user->id, 'token_length' => strlen($token)]);
         } catch (\Exception $e) {
             Log::error('No se pudo obtener el token JWT (Livewire)', ['user_id' => $user->id, 'error' => $e->getMessage()]);
         }
@@ -349,22 +366,22 @@ class ProgressiveLogin extends Component
         $this->dispatch('redirect-to', route('dashboard'));
     }
 
-    private function handleFailedLogin(string $reason, User $user = null)
+    private function handleFailedLogin(string $reason, ?User $user = null)
     {
         if ($user) {
             $user->increment('failed_login_attempts');
-            
+
             if ($user->failed_login_attempts >= 5) {
                 $user->update([
                     'locked_until' => now()->addMinutes(15),
-                    'failed_login_attempts' => 0
+                    'failed_login_attempts' => 0,
                 ]);
             }
         }
 
         $this->logAttempt('login', 'failed', ['reason' => $reason]);
         $this->incrementAttempts('login');
-        
+
         $this->step = 'user_found';
         $this->password = '';
         $this->showMessage('error', 'Credenciales incorrectas. Intente nuevamente.');
@@ -374,27 +391,28 @@ class ProgressiveLogin extends Component
 
     private function isRateLimited(string $type = 'search'): bool
     {
-        $key = "{$type}:" . request()->ip();
+        $key = "{$type}:".request()->ip();
         $maxAttempts = $type === 'registration' ? 3 : 10;
-        
+
         if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
             $this->showMessage('error', 'Demasiados intentos. Intente nuevamente en unos minutos.');
             $this->step = 'initial';
+
             return true;
         }
-        
+
         return false;
     }
 
     private function incrementAttempts(string $type = 'search'): void
     {
-        $key = "{$type}:" . request()->ip();
+        $key = "{$type}:".request()->ip();
         RateLimiter::hit($key, 15 * 60);
     }
 
     private function clearAttempts(string $type = 'login'): void
     {
-        $key = "{$type}:" . request()->ip();
+        $key = "{$type}:".request()->ip();
         RateLimiter::clear($key);
     }
 
@@ -407,7 +425,7 @@ class ProgressiveLogin extends Component
                 'attempt_type' => $type,
                 'result' => $result,
                 'user_agent' => request()->userAgent(),
-                'metadata' => $metadata
+                'metadata' => $metadata,
             ]);
         } catch (\Exception $e) {
             // Log silencioso
@@ -416,20 +434,20 @@ class ProgressiveLogin extends Component
 
     private function maskEmail(string $email): string
     {
-        if (!str_contains($email, '@')) {
+        if (! str_contains($email, '@')) {
             return $email;
         }
-        
+
         [$username, $domain] = explode('@', $email);
-        
+
         if (strlen($username) <= 4) {
             return $email;
         }
-        
+
         $visibleStart = substr($username, 0, 2);
         $visibleEnd = substr($username, -2);
-        $masked = $visibleStart . str_repeat('*', strlen($username) - 4) . $visibleEnd;
-        
+        $masked = $visibleStart.str_repeat('*', strlen($username) - 4).$visibleEnd;
+
         return "{$masked}@{$domain}";
     }
 

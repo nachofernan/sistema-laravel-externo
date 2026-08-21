@@ -7,15 +7,15 @@ use App\Http\Controllers\Auth\ProgressiveLoginController; // NUEVO
 use App\Http\Controllers\Auth\ProviderRegistrationController;
 use App\Http\Controllers\ConcursoController;
 use App\Http\Controllers\DataRequestController;
-use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\FileController;
+use App\Http\Controllers\ProveedorController;
 use App\Mail\RegistroProveedor;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Livewire\Livewire;
 
-if(app()->environment('production')) {
+if (app()->environment('production')) {
     Livewire::setUpdateRoute(function ($handle) {
         return Route::post('registroproveedores/livewire/update', $handle);
     });
@@ -51,20 +51,10 @@ Route::post('/concursos/{concursoId}/subir-archivo', [FileController::class, 'up
 // RUTAS PÚBLICAS (sin autenticación)
 // ============================================
 Route::middleware(['guest'])->group(function () {
-    
+
     // === LOGIN PROGRESIVO (NUEVO SISTEMA) ===
     Route::get('/login', [ProgressiveLoginController::class, 'showLoginForm'])
         ->name('login');
-    
-    // Rutas API para el login progresivo
-    Route::prefix('auth')->group(function () {
-        Route::post('/check-user', [ProgressiveLoginController::class, 'checkUser'])
-            ->name('auth.check-user');
-        Route::post('/login', [ProgressiveLoginController::class, 'login'])
-            ->name('auth.login');
-        Route::post('/check-registration', [ProgressiveLoginController::class, 'checkCuitForRegistration'])
-            ->name('auth.check-registration');
-    });
 
     // === FORMULARIO DE REGISTRO ===
     Route::get('/bienvenido', function () {
@@ -72,7 +62,8 @@ Route::middleware(['guest'])->group(function () {
     })->name('bienvenido');
     Route::post('/recibidos', function (Request $request) {
         $datos = $request->all();
-        //Mail::to(['infoproveedores@buenosairesenergia.com.ar', $datos['correo_personal']])->send(new RegistroProveedor($datos)); 
+
+        //Mail::to(['infoproveedores@buenosairesenergia.com.ar', $datos['correo_personal']])->send(new RegistroProveedor($datos));
         return redirect()->route('gracias');
     })->name('recibidos');
     Route::get('/gracias', function () {
@@ -85,7 +76,7 @@ Route::middleware(['guest'])->group(function () {
             ->name('legacy.login');
         Route::post('/login', [CustomLoginController::class, 'login'])
             ->name('legacy.login.post');
-        
+
         // Registro legacy
         Route::get('/register-provider', [ProviderRegistrationController::class, 'showRegistrationForm'])
             ->name('legacy.provider.register');
@@ -111,13 +102,13 @@ Route::middleware([
     'auth:sanctum',
     config('jetstream.auth_session'),
     'verified',
-    'force.password.change'
+    'force.password.change',
 ])->group(function () {
 
     /* Route::get('/login', function () {
         dd('login');
     })->name('login'); */
-    
+
     // Dashboard principal
     Route::get('/dashboard', [ProveedorController::class, 'dashboard'])
         ->name('dashboard');
@@ -126,11 +117,11 @@ Route::middleware([
     Route::get('/concursos', [ConcursoController::class, 'index'])->name('concursos.index');
     Route::get('/concursos/{id}', [ConcursoController::class, 'show'])->name('concursos.show');
     Route::patch('/concursos/{id}/intencion', [ConcursoController::class, 'cambiarIntencion'])->name('concursos.intencion');
-    
+
     // Logout
     Route::post('/logout', [CustomLoginController::class, 'logout'])
         ->name('logout');
-    
+
     // Validación de sesión
     Route::get('/validate-session', [CustomLoginController::class, 'validateSession'])
         ->name('validate.session');
@@ -142,7 +133,7 @@ Route::middleware([
             ->name('upload');
         Route::post('/upload-apoderado', [FileController::class, 'uploadDocumentacionApoderado'])
             ->name('uploadDocumentacionApoderado');
-        
+
         // Descarga y eliminación
         Route::post('/download', [FileController::class, 'downloadFileFromPlataforma'])
             ->name('download');
@@ -152,7 +143,7 @@ Route::middleware([
             ->name('download-concurso-documento');
         Route::post('/delete', [FileController::class, 'deleteFileFromPlataforma'])
             ->name('delete');
-        
+
         // API de concursos
         Route::get('/concursos/{concurso}/documentos', [FileController::class, 'getDocumentosInvitacion'])
             ->name('concursos.documentos');
@@ -175,7 +166,7 @@ Route::middleware([
 Route::middleware([
     'auth:sanctum',
     config('jetstream.auth_session'),
-    'verified'
+    'verified',
 ])->group(function () {
     Route::get('/change-password', [PasswordChangeController::class, 'showChangeForm'])
         ->name('password.change');
@@ -189,14 +180,14 @@ Route::middleware([
 Route::middleware([
     'auth:sanctum',
     config('jetstream.auth_session'),
-    'verified'
+    'verified',
 ])->prefix('admin')->name('admin.')->group(function () {
-    
+
     // Solo para usuarios administrativos (puedes agregar middleware específico)
     Route::get('/login-attempts', function () {
         return view('admin.login-attempts');
     })->name('login-attempts');
-    
+
     Route::get('/portal-access-requests', function () {
         return view('admin.portal-access-requests');
     })->name('portal-access-requests');
@@ -210,21 +201,24 @@ if (app()->environment(['local', 'testing'])) {
         Route::get('/test-login', function () {
             return view('livewire.auth.progressive-login');
         })->name('dev.test-login');
-        
+
         Route::get('/test-emails', function () {
             $email = 'test@buenosairesenergia.com.ar';
-            $maskedEmail = function($email) {
+            $maskedEmail = function ($email) {
                 [$username, $domain] = explode('@', $email);
-                if (strlen($username) <= 4) return $email;
+                if (strlen($username) <= 4) {
+                    return $email;
+                }
                 $visibleStart = substr($username, 0, 2);
                 $visibleEnd = substr($username, -2);
-                $masked = $visibleStart . str_repeat('x', strlen($username) - 4) . $visibleEnd;
+                $masked = $visibleStart.str_repeat('x', strlen($username) - 4).$visibleEnd;
+
                 return "{$masked}@{$domain}";
             };
-            
+
             return response()->json([
                 'original' => $email,
-                'masked' => $maskedEmail($email)
+                'masked' => $maskedEmail($email),
             ]);
         })->name('dev.test-emails');
     });
