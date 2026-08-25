@@ -31,10 +31,8 @@ class ProveedorController extends Controller
             if (!$proveedor) {
                 Log::error('Dashboard: No se pudo obtener datos del proveedor', [
                     'user_id' => $user->id,
-                    'cuit' => $user->username,
-                    'jwt_token' => $token,
+                    'token_length' => strlen($token ?? ''),
                     'session_id' => session()->getId(),
-                    'user' => $user,
                 ]);
 
                 // ✅ Cambio clave: Especificar el guard 'web'

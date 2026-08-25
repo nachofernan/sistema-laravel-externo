@@ -11,9 +11,11 @@
                     </div>
                     <div class="flex-1">
                         <p class="text-base font-semibold text-green-800">{{ session('success') }}</p>
-                        <p class="mt-1 text-sm text-green-700">
-                            El documento fue recibido correctamente y será revisado por el área de Legales. Una vez que sea aprobado, aparecerá en su legajo. Este proceso puede demorar algunos días hábiles.
-                        </p>
+                        @if (session('success_detail'))
+                            <p class="mt-1 text-sm text-green-700">
+                                {{ session('success_detail') }}
+                            </p>
+                        @endif
                     </div>
                     <button @click="open = false" class="shrink-0 text-green-500 hover:text-green-800 text-xl font-bold leading-none" aria-label="Cerrar">&times;</button>
                 </div>

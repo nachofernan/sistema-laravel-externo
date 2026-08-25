@@ -142,3 +142,19 @@ los formatos que la API dice soportar (DOC, XLS, JPG, PNG).
   se replica en el deployment público — ver `docs/VULNERABILIDADES.md` V3.
 - No hay `docs/modulos/` ni estructura multi-módulo: a diferencia del sistema interno, este repo es
   chico y de una sola pieza, así que no se replica esa estructura de documentación acá.
+- **Dos problemas de entorno de test, preexistentes, detectados el 2026-08-25 al agregar
+  `tests/Feature/EventoUsuarioTest.php`** (no son bugs del código de `eventos_usuario`, que se
+  verificó manualmente y con el test de `suspend()` pasando en limpio):
+  - **Cualquier test que hace una request HTTP real (`$this->get()`/`$this->post()`) devuelve 404.**
+    `APP_URL` en `.env` incluye el subdirectorio (`http://172.17.9.231/portalproveedores/public`), y
+    Laravel usa `config('app.url')` como base URL para las requests simuladas en tests. Como las
+    rutas están declaradas sin ese prefijo (`Route::get('/login', ...)`), la request termina
+    pidiendo `/portalproveedores/public/login`, que no matchea ninguna ruta. Confirmado que esto
+    afecta también tests preexistentes no tocados hoy (`AuthenticationTest::login screen can be
+    rendered` falla igual). Se necesitaría un `.env.testing` con `APP_URL=http://localhost` (o
+    similar) para que los tests HTTP funcionen.
+  - **Cualquier test que use `Livewire::test(...)` falla con
+    `ErrorException: Trying to access array offset on value of type null` en
+    `vendor/livewire/livewire/.../HandleComponents.php:88`** (snapshot null). Ya se había visto este
+    mismo error en tests no relacionados en una sesión anterior. No investigado a fondo — queda como
+    deuda de entorno de testing, no de la lógica de la app.

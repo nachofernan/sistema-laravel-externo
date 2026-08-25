@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Mail\PasswordResetMail;
+use App\Models\EventoUsuario;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -89,6 +90,8 @@ class PasswordResetController extends Controller
         $user->password = Hash::make($request->password);
         $user->must_change_password = false;
         $user->save();
+
+        EventoUsuario::registrar('cambio_password', $user, detalle: ['origen' => 'reset_por_token']);
 
         DB::table('password_reset_tokens')
             ->where(['username' => $request->username])

@@ -188,7 +188,13 @@ class ProveedorApiService
         if ($response->successful()) {
             return (object) ($response->json('data') ?? []);
         }
-        Log::error('API: Error al subir documento', ['status' => $response->status(), 'body' => $response->body()]);
+        Log::error('API: Error al subir documento', [
+            'status' => $response->status(),
+            'body' => $response->body(),
+            'documento_tipo_id' => $documentoTipoId,
+            'file_name' => $file->getClientOriginalName(),
+            'file_size' => $file->getSize(),
+        ]);
 
         return null;
     }

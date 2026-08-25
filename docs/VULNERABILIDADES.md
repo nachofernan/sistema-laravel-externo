@@ -84,26 +84,22 @@ fecha.
 
 ### V4 — El JWT se loguea en texto plano en múltiples puntos
 
-**Estado (2026-08-21): cerrado en el login.** `ProgressiveLoginController::login` (el método
-completo) se eliminó por huérfano (ver V10); `ProgressiveLogin.php:343` ahora loguea
-`token_length` en vez del token.
-
-**Queda abierto:**
+**Estado (2026-08-25): cerrado por completo.** Los tres puntos que quedaban abiertos desde el
+2026-08-21 se corrigieron durante un relevamiento general de `Log::` (ver también V11):
 
 ```
-app/Http/Controllers/ConcursoController.php:39-42 y 112       Log::error(..., ['jwt_token' => $token, 'user' => $user])
-app/Http/Controllers/ProveedorController.php:35                Log::error(..., ['jwt_token' => $token, 'user' => $user])
-app/Services/ConcursosApiService.php   (~10 llamadas)          Log::info('API Request Debug...', ['token' => $this->token, ...])
+app/Http/Controllers/ConcursoController.php:36 y 108     ya no loguean 'jwt_token' ni 'user' (objeto completo)
+app/Http/Controllers/ProveedorController.php:32          ya no loguea 'jwt_token' ni 'user' (objeto completo)
+app/Services/ConcursosApiService.php  (10 llamadas)       ya no loguean 'token'; se dejó 'token_length'
 ```
 
-**Impacto:** cualquiera con acceso a `storage/logs/laravel.log` (backup mal expuesto, acceso al
-hosting, un LFI en cualquier otra parte del sistema) obtiene tokens JWT válidos y puede impersonar
-proveedores contra la API interna mientras el token no expire (~10 minutos, pero se auto-refresca
-antes de vencer mientras la sesión esté activa, así que el log puede quedar con una cadena continua
-de tokens válidos a lo largo de una sesión larga).
+**Impacto (histórico):** cualquiera con acceso a `storage/logs/laravel.log` (backup mal expuesto,
+acceso al hosting, un LFI en cualquier otra parte del sistema) obtenía tokens JWT válidos y podía
+impersonar proveedores contra la API interna mientras el token no expirara (~10 minutos, pero se
+auto-refresca antes de vencer mientras la sesión esté activa, así que el log podía quedar con una
+cadena continua de tokens válidos a lo largo de una sesión larga).
 
-**Recomendación:** eliminar el valor del token de todos los `Log::*` que quedan; si hace falta
-debuggear, loguear como mucho su longitud (`strlen($token)`) o un hash truncado, nunca el valor.
+Ver entrada en "Resueltos" al final del documento.
 
 ---
 
@@ -187,15 +183,46 @@ Laravel sepa que la conexión es segura).
   (confirmado por grep sobre `resources/js` y `resources/views`). Alcanzables igual por URL directa.
   Se eliminaron (métodos, rutas y el logueo de JWT que tenían — ver V2, V4).
 - `ConcursoController::index()` llama `$this->testArrayToObjectRecursive()` en **cada** carga de
-  `/concursos` — un método de prueba que solo genera datos ficticios y los loguea. Ruido y trabajo
-  de más en cada request real.
+  `/concursos` — un método de prueba que solo genera datos ficticios. El `Log::info` que tenía
+  adentro ya se comentó (ver V11), pero la llamada en sí (línea 27) sigue ejecutándose y generando
+  el `$testData` ficticio en cada request sin ningún uso real: queda pendiente decidir si se borra
+  el método entero o se le encuentra un propósito.
 
 ### V11 — Logging verboso con datos personales de proveedores
 
-Varios `Log::info` en `ConcursosApiService` y `ConcursoController::index` (`'raw_data' => $concursosData`,
-`'body_preview'`, etc.) escriben el body completo de respuestas de la API interna, que incluye
-email/teléfono/dirección de contactos del concurso. No es una vulnerabilidad de acceso (los logs no
-son públicos), pero infla `storage/logs` con PII sin necesidad real de debugging permanente.
+**Estado (2026-08-25): mitigado**, en dos pasadas sobre el mismo relevamiento de `Log::` (54
+llamadas activas, ver también V4). Criterio adoptado (decisión del dueño del proyecto): solo se
+loguea login/logout, acciones de escritura del proveedor (con lo mínimo, sin body/token) y errores
+reales de la API. Las lecturas rutinarias (ver un listado, un documento, un concurso) no se loguean
+en el camino feliz — se consideran ruido, no una "situación" a preservar.
+
+**Primera pasada** — quitar lo más pesado / sin valor:
+- `ConcursoController.php` — `Log::info('Concursos Data Debug', ['raw_data' => $concursosData, ...])`
+  (corría en cada `GET /concursos`) y `Log::info('Test ArrayToObjectRecursive', ...)` (corría en
+  cada request, ver V10): **comentados**.
+- `SubirArchivoGeneral.php` y `Livewire\Concursos\SubirArchivo.php` — 7 `Log::info` de debug puro
+  ("Inicia"/"Valida"/objeto `$api`/objeto `UploadedFile`) en cada submit de un documento: **comentados**.
+
+**Segunda pasada** — aplicar el criterio login/escritura-mínima/error vs. lectura-sin-log a
+`ConcursosApiService.php`:
+- Lecturas puras (`getConcursos`, `getTiposDocumentosConcursos`, `getDocumentosInvitacion`,
+  `descargarDocumentoConcurso`, `verificarDocumentoProveedor`): se comentaron los pares
+  `Log::info` de "Request/Response Debug" que corrían en cada llamada exitosa. Solo queda el
+  `Log::error` de cada método para cuando la API devuelve error.
+- Escrituras (`cambiarIntencion`, `subirDocumentoConcurso`, `subirDocumentoAdicional`,
+  `eliminarDocumento`, `darBajaOferta`): se comentaron los mismos pares de debug, pero se dejó (o
+  agregó, donde no existía) un único `Log::info` de evento mínimo en éxito — solo IDs relevantes
+  (`concurso_id`, `documento_tipo_id`, `intencion`), sin `body`/`token`/objetos completos. Sirve
+  de rastro ante un reclamo futuro ("subí el documento y no está") sin ser ruido de volumen.
+
+Los `Log::error`/`warning` de excepción real (que sí incluyen `body`/`trace` completo pero solo
+disparan ante un fallo, no en el camino feliz) se dejaron como están: son la señal útil cuando algo
+se rompe. El log de login exitoso (`ProgressiveLogin.php`, ya reducido a `token_length` desde V4)
+tampoco se tocó: es exactamente el tipo de evento que se quiere conservar.
+
+**Recomendación:** si en el futuro hace falta reactivar alguno de los logs comentados para
+debuggear un incidente puntual, están comentados (no borrados) — reactivar puntualmente y volver a
+comentar al cerrar el incidente, no dejarlos prendidos "por si sirven".
 
 ### V12 — Excepción de email hardcodeada a una dirección personal
 
@@ -229,4 +256,16 @@ dejarlo disponible sin efecto.
 
 ## Resueltos
 
-_(vacío por ahora — se completa a medida que se cierren hallazgos de este documento)_
+### 2026-08-25 — V4: JWT en texto plano en logs
+
+Relevamiento completo de todos los `Log::` del proyecto (54 llamadas activas en 14 archivos) a
+pedido del dueño del proyecto, motivado por el tamaño de `storage/logs/laravel.log` (~75MB). Se
+detectó que 13 de esas llamadas exponían el JWT completo, el CUIT o el objeto `User` entero en
+`ConcursosApiService.php` (10 sitios), `ProveedorController.php` y `ConcursoController.php` (2
+sitios). Se corrigió sacando esos valores de los arrays de contexto, dejando `token_length` /
+`user_id` donde hacía falta para debug. Detalle completo en V4 más arriba.
+
+Queda pendiente, como segunda etapa (no tocada en este cierre): reducir el volumen de logging de
+V11 (body completo de respuestas de la API, debug de `raw_data`, el método
+`testArrayToObjectRecursive` que corre en cada `GET /concursos`) — eso es ruido y peso de archivo,
+no una vulnerabilidad de exposición de credenciales.

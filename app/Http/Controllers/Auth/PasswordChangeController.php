@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\EventoUsuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -31,6 +32,8 @@ class PasswordChangeController extends Controller
             'password' => Hash::make($request->password),
             'must_change_password' => false,
         ]);
+
+        EventoUsuario::registrar('cambio_password', auth()->user(), detalle: ['origen' => 'forzado_must_change_password']);
 
         return redirect()->route('dashboard')
             ->with('success', 'Contraseña actualizada exitosamente.');

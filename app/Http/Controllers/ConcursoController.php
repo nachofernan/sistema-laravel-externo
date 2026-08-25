@@ -35,10 +35,8 @@ class ConcursoController extends Controller
             if ($concursosData === null) {
                 Log::error('Concursos Index: No se pudo obtener datos de concursos', [
                     'user_id' => $user->id,
-                    'cuit' => $user->username,
-                    'jwt_token' => $token,
+                    'token_length' => strlen($token ?? ''),
                     'session_id' => session()->getId(),
-                    'user' => $user,
                 ]);
                 
                 // ✅ Cambio clave: Especificar el guard 'web'
@@ -50,13 +48,13 @@ class ConcursoController extends Controller
             }
 
             // Debug: Log de los datos recibidos
-            Log::info('Concursos Data Debug', [
+            /* Log::info('Concursos Data Debug', [
                 'data_type' => gettype($concursosData),
                 'data_count' => is_array($concursosData) ? count($concursosData) : 'not array',
                 'is_array' => is_array($concursosData),
                 'is_object' => is_object($concursosData),
                 'raw_data' => $concursosData, // Log completo de los datos
-            ]);
+            ]); */
 
             // Usar el patrón del dashboard: crear colecciones a medida que se necesiten
             $concursos = is_array($concursosData) ? $concursosData : [];
@@ -107,11 +105,9 @@ class ConcursoController extends Controller
             if (!$concursoData) {
                 Log::error('Concurso Show: No se pudo obtener datos del concurso', [
                     'user_id' => $user->id,
-                    'cuit' => $user->username,
                     'concurso_id' => $concursoId,
-                    'jwt_token' => $token,
+                    'token_length' => strlen($token ?? ''),
                     'session_id' => session()->getId(),
-                    'user' => $user,
                 ]);
                 return redirect()->route('concursos.index')
                     ->with('error', 'Error al cargar datos del concurso.');
@@ -219,8 +215,8 @@ class ConcursoController extends Controller
         ];
 
         $result = $this->convertToObjectsRecursive($testData);
-        
-        Log::info('Test ArrayToObjectRecursive', [
+
+        /* Log::info('Test ArrayToObjectRecursive', [
             'original' => $testData,
             'converted' => $result,
             'estado_is_object' => is_object($result->estado),
@@ -228,7 +224,7 @@ class ConcursoController extends Controller
             'contactos_first_is_object' => is_object($result->contactos[0]),
             'documentos_requeridos_is_array' => is_array($result->documentos_requeridos),
             'documentos_requeridos_first_is_object' => is_object($result->documentos_requeridos[0]),
-        ]);
+        ]); */
 
         return $result;
     }

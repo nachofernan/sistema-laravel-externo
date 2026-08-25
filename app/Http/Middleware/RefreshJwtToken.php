@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Support\Facades\Log;
+use App\Models\EventoUsuario;
 
 class RefreshJwtToken
 {
@@ -45,8 +46,10 @@ class RefreshJwtToken
                             'error' => $ex->getMessage()
                         ]);
 
+                        $user = Auth::user();
                         Auth::logout();
-                        
+                        EventoUsuario::registrar('logout', $user, detalle: ['motivo' => 'jwt_invalido']);
+
                         // ✅ Estas 3 líneas limpian las cookies y la sesión del lado del servidor
                         $request->session()->invalidate();
                         $request->session()->regenerateToken();
@@ -59,7 +62,9 @@ class RefreshJwtToken
             } else {
                 Log::warning('No hay token en sesión al entrar al middleware', ['user_id' => Auth::id()]);
                 // No hay token en sesión, forzar logout
+                $user = Auth::user();
                 Auth::guard('web')->logout();
+                EventoUsuario::registrar('logout', $user, detalle: ['motivo' => 'sin_token_en_sesion']);
                 session()->invalidate();
                 session()->regenerateToken();
                 return redirect()->route('login')->with('error', 'La sesión expiró. Por favor, ingrese nuevamente.');

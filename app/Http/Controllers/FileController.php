@@ -369,7 +369,8 @@ class FileController extends Controller
             );
 
             if ($result) {
-                return back()->with('success', 'Documento cargado con éxito.');
+                return back()->with('success', 'Documento cargado con éxito.')
+                    ->with('success_detail', 'El documento fue recibido correctamente y será revisado por el área de Legales. Una vez que sea aprobado, aparecerá en su legajo. Este proceso puede demorar algunos días hábiles.');
             }
 
             return back()->with('error', 'La API no pudo procesar el documento.');
@@ -400,7 +401,8 @@ class FileController extends Controller
             );
 
             if ($result) {
-                return back()->with('success', 'Apoderado/Representante cargado con éxito.');
+                return back()->with('success', 'Apoderado/Representante cargado con éxito.')
+                    ->with('success_detail', 'El documento fue recibido correctamente y será revisado por el área de Legales. Una vez que sea aprobado, aparecerá en su legajo. Este proceso puede demorar algunos días hábiles.');
             }
 
             return back()->with('error', 'La API no pudo procesar la carga del apoderado.');

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Models\EventoUsuario;
 use App\Models\User;
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ProvidersRouteServiceProvider;
 use Illuminate\Validation\ValidationException;
@@ -57,7 +58,10 @@ class CustomLoginController extends Controller
      */
     public function logout(Request $request)
     {
+        $user = Auth::user();
+
         Auth::guard('web')->logout();
+        EventoUsuario::registrar('logout', $user);
 
         $request->session()->invalidate();
         

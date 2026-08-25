@@ -52,6 +52,11 @@ class User extends Authenticatable
         return $this->hasMany(LoginAttempt::class, 'username', 'username');
     }
 
+    public function eventosUsuario()
+    {
+        return $this->hasMany(EventoUsuario::class, 'user_id');
+    }
+
     // Scopes
     public function scopeActive($query)
     {
@@ -80,24 +85,26 @@ class User extends Authenticatable
             'locked_until' => null,
             'failed_login_attempts' => 0
         ]);
+
+        EventoUsuario::registrar('desbloqueo_cuenta', $this, detalle: ['origen' => 'manual']);
     }
 
     public function suspend(string $reason = null): void
     {
         $this->update(['status' => 'suspended']);
-        
-        // Registrar en login_attempts si se quiere trackear
-        LoginAttempt::create([
-            'username' => $this->username,
-            'ip_address' => request()->ip() ?? 'system',
-            'attempt_type' => 'admin_action',
-            'result' => 'suspended',
-            'metadata' => ['reason' => $reason, 'admin_user' => Auth::user()->id]
+
+        EventoUsuario::registrar('suspension_cuenta', $this, detalle: [
+            'motivo' => $reason,
+            'admin_user_id' => Auth::user()?->id,
         ]);
     }
 
     public function activate(): void
     {
         $this->update(['status' => 'active']);
+
+        EventoUsuario::registrar('activacion_cuenta', $this, detalle: [
+            'admin_user_id' => Auth::user()?->id,
+        ]);
     }
 }

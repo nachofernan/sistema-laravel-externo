@@ -6,6 +6,7 @@ namespace App\Livewire\Auth;
 
 use App\Mail\PasswordResetMail;
 use App\Mail\TemporaryPasswordMail;
+use App\Models\EventoUsuario;
 use App\Models\LoginAttempt;
 use App\Models\User;
 use App\Services\ProveedorApiService;
@@ -329,6 +330,7 @@ class ProgressiveLogin extends Component
                 'user_id' => $user->id,
                 'email_sent' => true,
             ]);
+            EventoUsuario::registrar('registro', $user);
 
             $this->resetToInitial();
             $this->showMessage('success', "Usuario creado exitosamente. Se ha enviado una contraseña provisoria a {$maskedEmail}");
@@ -342,6 +344,8 @@ class ProgressiveLogin extends Component
 
     private function handleSuccessfulLogin(User $user)
     {
+        $estabaBloqueado = $user->locked_until !== null;
+
         $user->update([
             'failed_login_attempts' => 0,
             'locked_until' => null,
@@ -352,6 +356,11 @@ class ProgressiveLogin extends Component
         Auth::login($user, true);
         $this->logAttempt('login', 'success');
         $this->clearAttempts();
+
+        EventoUsuario::registrar('login', $user);
+        if ($estabaBloqueado) {
+            EventoUsuario::registrar('desbloqueo_cuenta', $user, detalle: ['origen' => 'automatico_por_login_exitoso']);
+        }
 
         // GUARDAR EL TOKEN JWT EN LA SESIÓN
         try {
@@ -376,6 +385,7 @@ class ProgressiveLogin extends Component
                     'locked_until' => now()->addMinutes(15),
                     'failed_login_attempts' => 0,
                 ]);
+                EventoUsuario::registrar('bloqueo_cuenta', $user, detalle: ['motivo' => 'exceso_intentos_fallidos']);
             }
         }
 
