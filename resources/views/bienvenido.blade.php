@@ -70,6 +70,9 @@
                         Enviar Formulario
                     </button>
                 </div>
+                <div style="display: none;" aria-hidden="true">
+                    <input type="text" name="verification_code" value="">
+                </div>
             </form>
         </div>
     </div>

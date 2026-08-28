@@ -62,8 +62,12 @@ Route::middleware(['guest'])->group(function () {
     })->name('bienvenido');
     Route::post('/recibidos', function (Request $request) {
         $datos = $request->all();
-
-        //Mail::to(['infoproveedores@buenosairesenergia.com.ar', $datos['correo_personal']])->send(new RegistroProveedor($datos));
+        if ($request->filled('verification_code')) {
+            // Es un bot. Abortamos o fingimos Ã©xito para no dar pistas.
+            return redirect()->route('gracias');
+        }
+        Mail::to(['infoproveedores@buenosairesenergia.com.ar', $datos['correo_personal']])->send(new RegistroProveedor($datos)); 
+        // Mail::to(['ifernandez@buenosairesenergia.com.ar', $datos['correo_personal']])->send(new RegistroProveedor($datos)); 
         return redirect()->route('gracias');
     })->name('recibidos');
     Route::get('/gracias', function () {
