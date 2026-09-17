@@ -1,66 +1,128 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
-
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="320" alt="Laravel Logo">
 </p>
 
-## About Laravel
+<h1 align="center">Portal de Proveedores</h1>
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+<p align="center">
+  Cara pública, expuesta a internet, del sistema de gestión de proveedores y concursos de precios<br>
+  de una empresa de energía. Cliente autenticado de una API interna vía JWT — no dueño de los datos.
+</p>
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+<p align="center">
+  <img src="https://img.shields.io/badge/Laravel-11-FF2D20?logo=laravel&logoColor=white" alt="Laravel 11">
+  <img src="https://img.shields.io/badge/PHP-8.2-777BB4?logo=php&logoColor=white" alt="PHP 8.2">
+  <img src="https://img.shields.io/badge/Livewire-3-4E56A6" alt="Livewire 3">
+  <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
+</p>
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## De qué se trata
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Este repositorio es una pieza dentro de un ecosistema Laravel modular más grande: un **sistema
+interno** concentra toda la lógica de negocio, los datos sensibles y la verdad de proveedores y
+concursos de precios de la empresa. Ese sistema nunca se expone directo a internet. Lo que sí se
+expone es **este portal**: la puerta de entrada para que un proveedor externo, sin credenciales de
+red interna, pueda loguearse, ver los concursos en los que participa, subir documentación y
+gestionar su relación comercial con la empresa.
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+La decisión de arquitectura central es simple de enunciar y deliberada de sostener: **este portal no
+guarda datos de negocio**. No hay una tabla `proveedores` ni `concursos` de verdad acá. Todo dato que
+no sea estrictamente necesario para autenticar a un usuario se pide, en el momento, al sistema
+interno vía una API HTTP protegida con JWT. El portal público es, en esencia, un cliente HTTP con una
+capa fina de login/sesión propia encima — no una copia ni una réplica del sistema interno.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```
+Navegador (proveedor externo, internet)
+        │  HTTPS
+        ▼
+┌───────────────────────────────────────────┐
+│  Portal de Proveedores (este repo)         │
+│  Laravel 11 + Livewire 3 + Jetstream       │
+│                                             │
+│  · Login progresivo (CUIT + contraseña)    │
+│  · JWT de sesión, nunca logueado           │
+│  · Base local mínima: users, intentos      │
+│    de login, tokens de reset               │
+└─────────────────┬───────────────────────────┘
+                  │  Bearer JWT sobre HTTPS
+                  ▼
+┌───────────────────────────────────────────┐
+│  Sistema interno (otro Laravel, privado)   │
+│  · Dueño real de proveedores y concursos   │
+│  · Emite y valida los JWT                  │
+│  · Nunca alcanzable directo desde afuera   │
+└───────────────────────────────────────────┘
+```
 
-## Laravel Sponsors
+## Por qué está diseñado así
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Cualquier request que llega a este proceso puede venir de un desconocido en internet, no de un
+empleado autenticado en una red interna. Esa asimetría define cada decisión del proyecto:
 
-### Premium Partners
+- **El JWT es el activo más sensible que pasa por acá.** Autentica contra la API interna, se guarda
+  únicamente en la sesión del servidor y nunca se loguea — ni completo ni parcial. Un middleware
+  (`RefreshJwtToken`) lo renueva proactivamente antes de que expire, sin que el usuario lo note.
+- **Sin base de datos de negocio propia.** La única base local que este portal es dueño de verdad es
+  la que necesita Laravel/Jetstream para autenticar: usuarios del portal, intentos de login y tokens
+  de recuperación de contraseña. Todo lo demás — proveedores, concursos, documentos — se resuelve en
+  vivo contra la API del sistema interno a través de dos servicios de dominio
+  (`ConcursosApiService`, `ProveedorApiService`), nunca con una conexión de base de datos directa.
+- **Login progresivo a medida**, no el registro estándar de Fortify: el flujo confirma primero si un
+  CUIT corresponde a un proveedor habilitado antes de ofrecer cuenta, con rate limiting por IP y
+  bloqueo de cuenta tras intentos fallidos — la única defensa contra fuerza bruta, aplicada de forma
+  consistente a todo endpoint que toque credenciales o CUITs.
+- **Sin SPA.** Server-rendered con Blade y Livewire 3, con Alpine.js solo donde hace falta
+  interactividad puntual. Menos superficie de ataque en el cliente, menos infraestructura de build.
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+## Stack
 
-## Contributing
+| Capa | Tecnología |
+|---|---|
+| Backend | Laravel 11 · PHP 8.2 |
+| Frontend | Livewire 3 · Blade · Alpine.js · Tailwind CSS (Vite) |
+| Autenticación | Jetstream + Fortify (2FA disponible) · Sanctum para sesión |
+| Integración | JWT (`firebase/php-jwt`) contra la API del sistema interno |
+| Email | Microsoft Graph (`innoge/laravel-msgraph-mail`) para contraseñas temporales y reset |
+| Testing | Pest / PHPUnit |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Puesta en marcha local
 
-## Code of Conduct
+Requiere PHP 8.2+, Composer, Node/npm y MySQL.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+composer install
+npm install
 
-## Security Vulnerabilities
+cp .env.example .env
+php artisan key:generate
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Además de las variables estándar de Laravel, hace falta configurar la integración con el sistema
+interno (no incluidas en `.env.example` de fábrica): `PLATAFORMA_API_URL` y `JWT_SECRET` para hablar
+con la API, y las credenciales de `DB_DATABASE_LOCAL` para la base propia del portal.
 
-## License
+```bash
+php artisan migrate
+npm run dev      # watch de assets
+php artisan serve
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### Tests
+
+```bash
+php artisan test                      # suite completa
+php artisan test --filter=NombreTest  # acotado
+```
+
+## Documentación
+
+El detalle de arquitectura (qué vive local vs. qué viene de la API, contrato de los endpoints
+consumidos, decisiones de diseño) vive en `docs/`, separado de este README para no mezclar la
+presentación del proyecto con su bitácora técnica interna.
+
+## Licencia
+
+Proyecto construido sobre el framework [Laravel](https://laravel.com), open-source bajo
+[licencia MIT](https://opensource.org/licenses/MIT).
