@@ -38,21 +38,21 @@ class ProgressiveLogin extends Component
     public bool $recoveryEmailSent = false;
 
     protected $rules = [
-        'cuit' => 'required|string|min:8|max:15|regex:/^[0-9]+$/',
+        'cuit' => 'required|string|min:6|max:20|regex:/^[A-Z0-9]+$/',
         'password' => 'nullable|string|min:6',
-        'recoveryCuit' => 'required|string|min:8|max:15|regex:/^[0-9]+$/',
+        'recoveryCuit' => 'required|string|min:6|max:20|regex:/^[A-Z0-9]+$/',
     ];
 
     protected $messages = [
         'cuit.required' => 'El CUIT es obligatorio.',
-        'cuit.regex' => 'El CUIT debe contener solo números.',
-        'cuit.min' => 'El CUIT debe tener al menos 8 dígitos.',
-        'cuit.max' => 'El CUIT debe tener máximo 15 dígitos.',
+        'cuit.regex' => 'El CUIT debe contener solo letras y números.',
+        'cuit.min' => 'El CUIT debe tener al menos 6 caracteres.',
+        'cuit.max' => 'El CUIT debe tener máximo 20 caracteres.',
         'password.min' => 'La contraseña debe tener al menos 6 caracteres.',
         'recoveryCuit.required' => 'El CUIT es obligatorio.',
-        'recoveryCuit.regex' => 'El CUIT debe contener solo números.',
-        'recoveryCuit.min' => 'El CUIT debe tener al menos 8 dígitos.',
-        'recoveryCuit.max' => 'El CUIT debe tener máximo 15 dígitos.',
+        'recoveryCuit.regex' => 'El CUIT debe contener solo letras y números.',
+        'recoveryCuit.min' => 'El CUIT debe tener al menos 6 caracteres.',
+        'recoveryCuit.max' => 'El CUIT debe tener máximo 20 caracteres.',
     ];
 
     public function mount()
@@ -62,10 +62,19 @@ class ProgressiveLogin extends Component
 
     public function updatedCuit()
     {
+        // Saneo y normalizo por si el filtro de teclado del navegador se saltea (wire:model directo, paste, autocompletado)
+        $this->cuit = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $this->cuit));
+
         // Reset cuando cambia el CUIT
         if ($this->step !== 'initial') {
             $this->resetToInitial();
         }
+    }
+
+    // ACCIÓN: Volver a habilitar la edición del CUIT tras una búsqueda
+    public function cambiarCuit(): void
+    {
+        $this->resetToInitial();
     }
 
     // ACCIÓN: Mostrar modal de recuperación

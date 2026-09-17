@@ -24,6 +24,16 @@
                 @elseif($message['type'] === 'warning') bg-yellow-50 border-yellow-200 text-yellow-800
                 @endif">
                 {!! $message['text'] !!}
+
+                @if($step === 'user_internal_only')
+                <button
+                    wire:click="sendTemporaryPassword"
+                    wire:loading.attr="disabled"
+                    class="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-150 disabled:opacity-50">
+                    <span wire:loading.remove wire:target="sendTemporaryPassword">Enviar Contraseña Provisoria al Email</span>
+                    <span wire:loading wire:target="sendTemporaryPassword">Enviando...</span>
+                </button>
+                @endif
             </div>
             @endif
     
@@ -40,26 +50,34 @@
             <form wire:submit="searchUser" class="space-y-4 grid grid-cols-10 gap-4">
                 <div class="col-span-7">
                     <x-label for="cuit" value="CUIT" />
-                    <x-input 
-                        id="cuit" 
-                        class="block mt-1 w-full" 
-                        type="text" 
-                        wire:model.live.debounce.500ms="cuit"
-                        placeholder="Ingrese su CUIT sin guiones"
-                        maxlength="15"
-                        required 
-                        autofocus 
+                    <x-input
+                        id="cuit"
+                        class="block mt-1 w-full"
+                        type="text"
+                        wire:model="cuit"
+                        placeholder="Ingrese su CUIT o identificador fiscal, sin guiones ni espacios"
+                        maxlength="20"
+                        oninput="this.value = this.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()"
+                        :disabled="$step !== 'initial'"
+                        required
+                        autofocus
                         autocomplete="off"
                     />
-                    @error('cuit') 
-                    <span class="text-sm text-red-600 mt-1">{{ $message }}</span> 
+                    @error('cuit')
+                    <span class="text-sm text-red-600 mt-1">{{ $message }}</span>
                     @enderror
                 </div>
-    
+
                 <div class="pt-2 col-span-3">
+                    @if($step === 'initial')
                     <button type="submit" class="block w-full bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 px-4 rounded-md text-center transition duration-150">
                         Buscar
                     </button>
+                    @else
+                    <button type="button" wire:click="cambiarCuit" class="block w-full bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-md text-center transition duration-150">
+                        Cambiar
+                    </button>
+                    @endif
                 </div>
             </form>
             @endif
@@ -99,19 +117,6 @@
                         </div>
                     </div>
                 </form>
-            </div>
-            @endif
-    
-            <!-- CASO 2: Existe en base interna pero no como usuario -->
-            @if($step === 'user_internal_only')
-            <div class="border-t pt-4 mt-4">
-                <button 
-                    wire:click="sendTemporaryPassword"
-                    wire:loading.attr="disabled"
-                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-150 disabled:opacity-50">
-                    <span wire:loading.remove>Enviar Contraseña Provisoria al Email</span>
-                    <span wire:loading>Enviando...</span>
-                </button>
             </div>
             @endif
     
