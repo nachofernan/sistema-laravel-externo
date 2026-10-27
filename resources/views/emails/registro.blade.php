@@ -59,8 +59,8 @@
             <strong>Razón social:</strong>{{$datos['razonsocial']}}<br>
             <strong>CUIT/CUIL:</strong>{{$datos['cuit']}}<br>
             <strong>Correo Electrónico Institucional:</strong>{{$datos['correo_institucional']}}<br>
-            <strong>Teléfono:</strong>{{$datos['telefono']}}<br>
-            <strong>Dirección:</strong>{{$datos['direccion']}}<br>
+            <strong>Teléfono:</strong>{{$datos['telefono'] ?? ''}}<br>
+            <strong>Dirección:</strong>{{$datos['direccion'] ?? ''}}<br>
             <hr>
             Próximamente Centrales de la Costa Atlántica S.A. se contactará con usted para ampliar la solicitud de la información.
             <hr>

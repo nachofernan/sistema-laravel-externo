@@ -9,9 +9,7 @@ use App\Http\Controllers\ConcursoController;
 use App\Http\Controllers\DataRequestController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\ProveedorController;
-use App\Mail\RegistroProveedor;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
+use App\Http\Controllers\SolicitudRegistroController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Livewire;
 
@@ -60,16 +58,8 @@ Route::middleware(['guest'])->group(function () {
     Route::get('/bienvenido', function () {
         return view('bienvenido');
     })->name('bienvenido');
-    Route::post('/recibidos', function (Request $request) {
-        $datos = $request->all();
-        if ($request->filled('verification_code')) {
-            // Es un bot. Abortamos o fingimos Ã©xito para no dar pistas.
-            return redirect()->route('gracias');
-        }
-        Mail::to(['infoproveedores@buenosairesenergia.com.ar', $datos['correo_personal']])->send(new RegistroProveedor($datos)); 
-        // Mail::to(['ifernandez@buenosairesenergia.com.ar', $datos['correo_personal']])->send(new RegistroProveedor($datos)); 
-        return redirect()->route('gracias');
-    })->name('recibidos');
+    Route::post('/recibidos', [SolicitudRegistroController::class, 'store'])
+        ->name('recibidos');
     Route::get('/gracias', function () {
         return view('gracias');
     })->name('gracias');

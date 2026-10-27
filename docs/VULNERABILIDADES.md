@@ -115,9 +115,39 @@ masa apenas alguien haga un `fill()`/`update()` con input crudo: `status`, `lock
 **Recomendación:** declarar `$fillable` explícito con las columnas que de verdad necesitan
 asignación masiva (`name`, `username`, `email`, `password` como mucho).
 
+### V14 — El formulario público de registro funcionaba como relay de correo
+
+**Estado (2026-10-27): resuelto.**
+
+`POST /recibidos` (formulario de `/bienvenido`, sin login) mandaba el mail `RegistroProveedor`
+desde la cuenta MS Graph de BAESA a `infoproveedores@` **y a la dirección `correo_personal` que
+escribía el visitante**, repitiendo todo su texto libre (nombre, razón social, dirección). No había
+validación del lado del servidor (`$request->all()` directo al mail); la casilla "firma" solo se
+controlaba en JavaScript, y el honeypot era un `display:none` inline.
+
+**Impacto:** cualquiera podía usar el formulario para mandar texto arbitrario, con links, a
+cualquier dirección, firmado por el dominio de BAESA. Explica por qué los bots insistían aunque se
+endurecieran los filtros. Además había riesgo de que el dominio terminara en listas negras y
+dejaran de llegar los mails legítimos (contraseña temporal, reset).
+
+**Corrección:** `SolicitudRegistroController::store` manda el mail **solo** a `infoproveedores@`,
+con los datos validados (largos máximos, emails válidos, CUIT normalizado, `firma` obligatoria).
+Además verifica Cloudflare Turnstile del lado del servidor, con fail-closed. Tests en
+`tests/Feature/SolicitudRegistroTest.php`.
+
 ---
 
 ## Medio
+
+### V15 — `POST /recibidos` sin rate limit
+
+El formulario público de registro no tiene `throttle`. Recibe un CUIT, así que según el axioma 5
+debería sumarse a la disciplina de rate limiting. Se postergó por decisión del dueño del proyecto
+(2026-10-27). Lo mitigan Turnstile y que, desde V14, un envío solo llega a la casilla interna: el
+peor caso hoy es llenar de basura `infoproveedores@`, no mandar spam a terceros.
+
+**Recomendación:** agregar `->middleware('throttle:5,10')` (o similar) a la ruta cuando se
+retome. Es una línea.
 
 ### V6 — `dd($request->all())` commiteado en `CustomLoginController::login`
 
@@ -255,6 +285,13 @@ dejarlo disponible sin efecto.
 ---
 
 ## Resueltos
+
+### 2026-10-27 — V14: formulario público de registro como relay de correo
+
+Detectado al analizar por qué los bots seguían pasando los filtros de `/recibidos`: el formulario
+le mandaba a cualquier dirección un mail con texto libre, desde la cuenta de BAESA. Ahora el mail va
+solo a la casilla interna, con validación del lado del servidor y Cloudflare Turnstile. Queda
+abierto el rate limit (V15). Detalle en V14 más arriba.
 
 ### 2026-08-25 — V4: JWT en texto plano en logs
 

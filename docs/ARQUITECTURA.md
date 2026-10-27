@@ -130,6 +130,21 @@ antes de reenviar: tamaño (`max:10240` = 10MB), sanitización de nombre
 los flujos que exigen PDF (`isValidPdfFile`) — no hay validación de tipo MIME real para el resto de
 los formatos que la API dice soportar (DOC, XLS, JPG, PNG).
 
+## Formulario público de solicitud de registro (`/bienvenido` → `/recibidos`)
+
+Formulario sin login para que un proveedor nuevo pida el alta. `SolicitudRegistroController::store`
+valida los datos y manda un único mail (`RegistroProveedor`) **solo** a
+`infoproveedores@buenosairesenergia.com.ar`. Al solicitante no se le manda nada, para que el
+formulario no sirva para mandar spam con el dominio de BAESA (ver `docs/VULNERABILIDADES.md` V14).
+
+Protección anti-bot:
+- **Cloudflare Turnstile** (regla `App\Rules\Turnstile`). Es la única dependencia externa de esta
+  app fuera de la API interna y MS Graph. Necesita `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` en
+  el `.env` y salida HTTPS desde el servidor a `challenges.cloudflare.com`. Si Cloudflare no
+  responde, el envío se rechaza (fail-closed).
+- Un honeypot (`verification_code`): si viene completo, se finge éxito sin mandar nada.
+- Sin rate limit por ahora (ver V15).
+
 ## Cosas a revisar / deuda que no es responsabilidad exclusiva del código
 
 - **`.env.example` está desactualizado**: no lista `PLATAFORMA_API_URL`, `JWT_SECRET`,
@@ -153,6 +168,8 @@ los formatos que la API dice soportar (DOC, XLS, JPG, PNG).
     afecta también tests preexistentes no tocados hoy (`AuthenticationTest::login screen can be
     rendered` falla igual). Se necesitaría un `.env.testing` con `APP_URL=http://localhost` (o
     similar) para que los tests HTTP funcionen.
+    **Resuelto (2026-10-27):** `phpunit.xml` fija `APP_URL=http://localhost` para el entorno de
+    test. Los tests HTTP ya llegan a las rutas reales.
   - **Cualquier test que use `Livewire::test(...)` falla con
     `ErrorException: Trying to access array offset on value of type null` en
     `vendor/livewire/livewire/.../HandleComponents.php:88`** (snapshot null). Ya se había visto este

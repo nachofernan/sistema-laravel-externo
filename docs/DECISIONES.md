@@ -21,3 +21,27 @@ crearon `docs/ARQUITECTURA.md` y `docs/VULNERABILIDADES.md`, y se ajustaron los 
 app todavía tiene conexiones SQL directas y credenciales propias a las bases internas `proveedores`
 y `concursos` (no solo acceso vía API), heredadas de una refactorización incompleta. Ver
 `docs/VULNERABILIDADES.md` V2.
+
+---
+
+## 2026-10-27 — Formulario público de registro: mail solo interno + Cloudflare Turnstile
+
+**Contexto:** bots enviaban el formulario de `/bienvenido` y pasaban cada filtro que se agregaba.
+Al analizarlo apareció el motivo: el mail se mandaba también a la dirección que escribía el
+visitante, con su texto libre, así que el formulario servía para mandar spam gratis con el
+dominio de BAESA (`docs/VULNERABILIDADES.md` V14).
+
+**Decisiones:**
+- **El mail va solo a `infoproveedores@`.** Al solicitante no se le manda ninguna confirmación por
+  mail. Así desaparece lo que hacía valioso al formulario para un spammer.
+- **Validación del lado del servidor** de todos los campos. Nunca más `$request->all()` al mail.
+- **Cloudflare Turnstile como captcha.** Se evaluaron opciones sin dependencias externas (ALTCHA
+  con proof-of-work, trampas de tiempo, honeypot mejorado, captcha de imagen local). Se eligió
+  Turnstile porque usa señales de reputación de toda la red de Cloudflare, cosa que una solución
+  alojada en el propio servidor no tiene. Es la primera dependencia externa en el camino de un
+  formulario público.
+- **Fail-closed:** si Cloudflare no responde, el envío se rechaza con un mensaje para reintentar.
+  Se prefirió frenar a algún proveedor legítimo durante una caída rara antes que abrir una ventana
+  a los bots.
+- **Rate limit postergado** (`docs/VULNERABILIDADES.md` V15). Queda en tensión con el axioma 5, y
+  se anota como pendiente explícito.
