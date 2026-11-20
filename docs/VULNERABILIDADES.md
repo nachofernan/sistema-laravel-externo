@@ -32,6 +32,12 @@ enviar el `Bearer`. Si no es viable a corto plazo, tratar `JWT_SECRET` como el s
 del `.env`, rotarlo si alguna vez hay sospecha de compromiso, y considerar a mediano plazo migrar a
 RS256 (par asimétrico) donde esta app solo tenga la clave **pública** de verificación.
 
+**Nota (2026-11-20):** desde que `RefreshJwtToken` dejó de estar registrado (V16), ningún código en
+ejecución usa `JWT_SECRET`, y la renovación reactiva ante un 401 de `ConcursosApiService` no lo
+necesita. Si la renovación preventiva se rehace sin decodificar el token (por ejemplo, guardando en
+sesión la hora en que se obtuvo), el secreto se puede **sacar del `.env` de esta app** y V1 queda
+cerrado.
+
 ---
 
 ### V2 — Conexiones SQL directas y activas a bases internas (`proveedores`, `concursos`)
@@ -194,6 +200,25 @@ explícitamente para que el navegador nunca la mande por HTTP en texto plano.
 confirmar que el proxy/Apache que termina TLS está bien configurado en `TrustProxies` para que
 Laravel sepa que la conexión es segura).
 
+### V16 — `SecurityHeaders` y `RefreshJwtToken` dejaron de estar registrados
+
+Detectado el 2026-11-20 al analizar el incidente del concurso 145. El commit `b0a60b1` ("Todo como
+está hoy", 2026-04-23) sacó de `bootstrap/app.php` el bloque `$middleware->web(append: [...])` que
+registraba los dos middlewares. Las clases siguen en `app/Http/Middleware/`, pero no corren.
+
+- **`SecurityHeaders`:** la app pública responde sin los headers de endurecimiento (CSP,
+  `X-Frame-Options`, etc.) desde abril.
+- **`RefreshJwtToken`:** nada renovaba el JWT de 10 minutos mientras el usuario navegaba. A los 10
+  minutos de entrar, toda acción sobre concursos fallaba con 401, y el modal de acciones no mostraba
+  el error. El 2026-11-20 un proveedor no pudo presentar oferta antes del cierre de las 10:30.
+
+**Estado (2026-11-20): mitigado el impacto funcional.** `ConcursosApiService` renueva el token y
+reintenta una vez ante un 401 (commit `62518bb`). Los headers siguen sin aplicarse.
+
+**Recomendación:** volver a registrar `SecurityHeaders` en el grupo `web`, probado fuera de la
+temporada de concursos (puede romper recursos externos si la CSP es estricta). Sobre
+`RefreshJwtToken`, ver la nota de V1: hoy es el único código que usa `JWT_SECRET`.
+
 ---
 
 ## Bajo / informativo
@@ -281,6 +306,20 @@ activó). No es explotable activamente porque no hay ningún usuario con 2FA act
 progresivo antes de dar por buena la sesión; si se decide que 2FA es para otro caso de uso (ej.
 personal interno) y no aplica a proveedores por CUIT, desactivar el feature explícitamente en vez de
 dejarlo disponible sin efecto.
+
+### V17 — `POST /api/generate-token` emite un JWT con solo `{cuit, email}`
+
+`AuthController::getNewToken` obtiene un JWT del sistema interno mandando el CUIT y el email del
+usuario, sin contraseña ni secreto compartido. Quien pueda llegar a ese endpoint y conozca el CUIT y
+el email de un proveedor (datos poco secretos) obtiene un token a su nombre.
+
+**Estado (2026-11-20):** mitigado por la red. Confirmado con el dueño del proyecto que
+`PLATAFORMA_API_URL` corre en el mismo servidor y se accede por IP local, sin exposición a internet.
+El riesgo queda condicionado a que eso se mantenga (ojo con la migración de servidor) o a que esta
+app se comprometa (ver V1).
+
+**Recomendación:** si la API interna llega a exponerse, o como endurecimiento, exigir un secreto de
+servicio en `generate-token` además del CUIT y el email.
 
 ---
 

@@ -45,3 +45,23 @@ dominio de BAESA (`docs/VULNERABILIDADES.md` V14).
   a los bots.
 - **Rate limit postergado** (`docs/VULNERABILIDADES.md` V15). Queda en tensión con el axioma 5, y
   se anota como pendiente explícito.
+
+---
+
+## 2026-11-20 — Renovación del JWT: reactiva ante un 401, la preventiva se posterga
+
+**Contexto:** un proveedor no pudo presentar oferta en el concurso 145 antes del cierre. Su JWT de
+10 minutos había vencido, y desde `b0a60b1` (abril) `RefreshJwtToken` no estaba registrado, así que
+nada lo renovaba. El modal no mostraba el error. Ver `docs/VULNERABILIDADES.md` V16.
+
+**Decisiones:**
+- **Renovación reactiva en `ConcursosApiService`:** ante un 401, se pide un token nuevo (o se usa uno
+  ya renovado en la sesión) y se reintenta una sola vez. Si falla, se devuelve el 401 original, así
+  que el peor caso es igual que antes. Se hizo primero porque no cambia nada en el camino que
+  funciona y se puede subir en plena temporada de concursos.
+- **La renovación preventiva (volver a registrar `RefreshJwtToken`) se posterga.** Toca todos los
+  requests y hay que probarla con calma. Al retomarla, conviene rehacerla sin decodificar el token,
+  para que la app pueda dejar de tener `JWT_SECRET` (V1).
+- **Sin cambios en el front:** las vistas se están actualizando en otro lado. Mostrar el error de
+  intención en el modal queda pendiente para cuando se integre ese trabajo. Por ahora los logs de
+  error de la API suman `user_id` y `concurso_id`, para poder reconstruir un incidente.
