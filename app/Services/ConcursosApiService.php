@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Http\UploadedFile;
 
 class ConcursosApiService
 {
     protected string $apiUrl;
+
     protected ?string $token;
+
     protected string $cuit;
 
     public function __construct(?string $token = null, ?string $cuit = null)
@@ -23,36 +27,87 @@ class ConcursosApiService
     }
 
     /**
+     * Envía un pedido autenticado a la API interna. Si la API responde 401 (token vencido),
+     * renueva el JWT y reintenta UNA sola vez. Si la renovación falla, devuelve el 401 original.
+     *
+     * El 401 lo devuelve la capa de autenticación de la API antes de ejecutar la acción, así que
+     * reintentar una escritura no la duplica. El pedido se arma dentro del closure para que un
+     * reintento vuelva a construirlo completo (incluidos los adjuntos).
+     *
+     * @param  callable(PendingRequest): Response  $armarPedido
+     */
+    private function enviar(callable $armarPedido): Response
+    {
+        $tokenUsado = $this->token ?? '';
+        $response = $armarPedido(Http::withToken($tokenUsado));
+
+        if ($response->status() !== 401) {
+            return $response;
+        }
+
+        // Otra instancia del servicio pudo haber renovado el token en este mismo request:
+        // si la sesión ya tiene uno distinto, se reintenta con ese sin pedir otro.
+        $tokenEnSesion = session('jwt_token');
+        if ($tokenEnSesion && $tokenEnSesion !== $tokenUsado) {
+            $this->token = $tokenEnSesion;
+        } elseif (! $this->renovarToken()) {
+            return $response;
+        }
+
+        Log::info('API: token vencido, reintentando con token renovado', ['user_id' => Auth::id()]);
+
+        return $armarPedido(Http::withToken($this->token ?? ''));
+    }
+
+    /**
+     * Pide un JWT nuevo al sistema interno y lo guarda en la propiedad y en la sesión.
+     */
+    private function renovarToken(): bool
+    {
+        try {
+            $nuevoToken = app(\App\Http\Controllers\AuthController::class)->getNewToken();
+            $this->token = $nuevoToken;
+            session(['jwt_token' => $nuevoToken]);
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('API: no se pudo renovar el token', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Registra un error de la API con el usuario y el contexto que permitan reconstruir un incidente.
+     */
+    private function registrarError(string $mensaje, Response $response, array $contexto = []): void
+    {
+        Log::error($mensaje, [
+            'user_id' => Auth::id(),
+            ...$contexto,
+            'status' => $response->status(),
+            'body' => $response->body(),
+        ]);
+    }
+
+    /**
      * Obtener listado de concursos del proveedor
      * Según documentación: GET /api/concursos
      */
     public function getConcursos(): ?array
     {
-        /* Log::info('API Request Debug - Concursos', [
-            'url' => "{$this->apiUrl}/api/concursos",
-            'token_length' => strlen($this->token ?? ''),
-            'cuit' => $this->cuit,
-        ]); */
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->get("{$this->apiUrl}/api/concursos"));
 
-        $response = Http::withToken($this->token)
-            ->get("{$this->apiUrl}/api/concursos");
-
-        /* Log::info('API Response Debug - Concursos', [
-            'status' => $response->status(),
-            'headers' => $response->headers(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
-        
         if ($response->successful()) {
-            $data = $response->json('data') ?? [];
-            return $data; // Devolver array directamente
+            return $response->json('data') ?? [];
         }
-        
-        Log::error('API: Error al obtener concursos del proveedor', [
-            'status' => $response->status(), 
-            'body' => $response->body()
-        ]);
+
+        $this->registrarError('API: Error al obtener concursos del proveedor', $response);
+
         return null;
     }
 
@@ -62,32 +117,17 @@ class ConcursosApiService
      */
     public function getConcurso(int $concursoId): ?object
     {
-        /* Log::info('API Request Debug - Concurso Específico', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}",
-            'token' => $this->token,
-            'token_length' => strlen($this->token ?? ''),
-            'cuit' => $this->cuit,
-            'concurso_id' => $concursoId,
-        ]); */
-        
-        $response = Http::withToken($this->token)
-            ->get("{$this->apiUrl}/api/concursos/{$concursoId}");
-        
-        /* Log::info('API Response Debug - Concurso Específico', [
-            'status' => $response->status(),
-            'headers' => $response->headers(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
-        
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->get("{$this->apiUrl}/api/concursos/{$concursoId}"));
+
         if ($response->successful()) {
             return (object) ($response->json('data') ?? []);
         }
-        
-        Log::error('API: Error al obtener concurso específico', [
-            'status' => $response->status(), 
-            'body' => $response->body()
+
+        $this->registrarError('API: Error al obtener concurso específico', $response, [
+            'concurso_id' => $concursoId,
         ]);
+
         return null;
     }
 
@@ -97,38 +137,29 @@ class ConcursosApiService
      */
     public function cambiarIntencion(int $concursoId, int $intencion, ?string $observaciones = null): bool
     {
-        /* Log::info('API Request Debug - Cambiar Intención', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/invitacion",
-            'intencion' => $intencion,
-            'token_length' => strlen($this->token ?? ''),
-        ]); */
-
         $payload = ['intencion' => $intencion];
-        if ($intencion === 2 && !empty($observaciones)) {
+        if ($intencion === 2 && ! empty($observaciones)) {
             $payload['observaciones'] = $observaciones;
         }
 
-        $response = Http::withToken($this->token)
-            ->patch("{$this->apiUrl}/api/concursos/{$concursoId}/invitacion", $payload);
-
-        /* Log::info('API Response Debug - Cambiar Intención', [
-            'status' => $response->status(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->patch("{$this->apiUrl}/api/concursos/{$concursoId}/invitacion", $payload));
 
         if ($response->successful()) {
             Log::info('Intención de participación cambiada', [
+                'user_id' => Auth::id(),
                 'concurso_id' => $concursoId,
                 'intencion' => $intencion,
             ]);
+
             return true;
         }
-        
-        Log::error('API: Error al cambiar intención', [
-            'status' => $response->status(), 
-            'body' => $response->body()
+
+        $this->registrarError('API: Error al cambiar intención', $response, [
+            'concurso_id' => $concursoId,
+            'intencion' => $intencion,
         ]);
+
         return false;
     }
 
@@ -138,28 +169,15 @@ class ConcursosApiService
      */
     public function getTiposDocumentosConcursos(): array
     {
-        /* Log::info('API Request Debug - Tipos Documentos', [
-            'url' => "{$this->apiUrl}/api/concursos/tipos-documentos",
-            'token_length' => strlen($this->token ?? ''),
-        ]); */
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->get("{$this->apiUrl}/api/concursos/tipos-documentos"));
 
-        $response = Http::withToken($this->token)
-            ->get("{$this->apiUrl}/api/concursos/tipos-documentos");
-
-        /* Log::info('API Response Debug - Tipos Documentos', [
-            'status' => $response->status(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
-        
         if ($response->successful()) {
             return $response->json('data') ?? [];
         }
-        
-        Log::error('API: Error al obtener tipos de documentos de concursos', [
-            'status' => $response->status(), 
-            'body' => $response->body()
-        ]);
+
+        $this->registrarError('API: Error al obtener tipos de documentos de concursos', $response);
+
         return [];
     }
 
@@ -169,47 +187,33 @@ class ConcursosApiService
      */
     public function subirDocumentoConcurso(int $concursoId, UploadedFile $file, ?int $documentoTipoId = null): ?object
     {
-        /* Log::info('API Request Debug - Subir Documento Concurso', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos",
-            'documento_tipo_id' => $documentoTipoId,
-            'file_name' => $file->getClientOriginalName(),
-            'file_size' => $file->getSize(),
-            'token_length' => strlen($this->token ?? ''),
-        ]); */
-
         $payload = [];
         // Solo agregamos el ID si no es nulo (para que no mande "documento_tipo_id": null a la API si no lo espera)
         if ($documentoTipoId) {
             $payload['documento_tipo_id'] = $documentoTipoId;
         }
 
-        $response = Http::withToken($this->token)
+        $response = $this->enviar(fn (PendingRequest $http) => $http
             ->attach('file', file_get_contents($file->getPathname()), $file->getClientOriginalName())
-            ->post("{$this->apiUrl}/api/concursos/{$concursoId}/documentos", $payload);
-
-        /* Log::info('API Response Debug - Subir Documento Concurso', [
-            'status' => $response->status(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
+            ->post("{$this->apiUrl}/api/concursos/{$concursoId}/documentos", $payload));
 
         if ($response->successful()) {
             Log::info('Documento de concurso subido', [
+                'user_id' => Auth::id(),
                 'concurso_id' => $concursoId,
                 'documento_tipo_id' => $documentoTipoId,
             ]);
-            $data = $response->json('data') ?? [];
-            return (object) $data;
+
+            return (object) ($response->json('data') ?? []);
         }
-        
-        Log::error('API: Error al subir documento de concurso', [
-            'status' => $response->status(),
-            'body' => $response->body(),
+
+        $this->registrarError('API: Error al subir documento de concurso', $response, [
             'concurso_id' => $concursoId,
             'documento_tipo_id' => $documentoTipoId,
             'file_name' => $file->getClientOriginalName(),
             'file_size' => $file->getSize(),
         ]);
+
         return null;
     }
 
@@ -219,44 +223,30 @@ class ConcursosApiService
      */
     public function subirDocumentoAdicional(int $concursoId, UploadedFile $file, ?string $comentarios = null): ?object
     {
-        /* Log::info('API Request Debug - Subir Documento Adicional', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos",
-            'file_name' => $file->getClientOriginalName(),
-            'file_size' => $file->getSize(),
-            'comentarios' => $comentarios,
-            'token_length' => strlen($this->token ?? ''),
-        ]); */
-
-        $data = [];
+        $payload = [];
         if ($comentarios) {
-            $data['comentarios'] = $comentarios;
+            $payload['comentarios'] = $comentarios;
         }
 
-        $response = Http::withToken($this->token)
+        $response = $this->enviar(fn (PendingRequest $http) => $http
             ->attach('file', file_get_contents($file->getPathname()), $file->getClientOriginalName())
-            ->post("{$this->apiUrl}/api/concursos/{$concursoId}/documentos", $data);
-
-        /* Log::info('API Response Debug - Subir Documento Adicional', [
-            'status' => $response->status(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
+            ->post("{$this->apiUrl}/api/concursos/{$concursoId}/documentos", $payload));
 
         if ($response->successful()) {
             Log::info('Documento adicional subido', [
+                'user_id' => Auth::id(),
                 'concurso_id' => $concursoId,
             ]);
-            $data = $response->json('data') ?? [];
-            return (object) $data;
+
+            return (object) ($response->json('data') ?? []);
         }
-        
-        Log::error('API: Error al subir documento adicional', [
-            'status' => $response->status(),
-            'body' => $response->body(),
+
+        $this->registrarError('API: Error al subir documento adicional', $response, [
             'concurso_id' => $concursoId,
             'file_name' => $file->getClientOriginalName(),
             'file_size' => $file->getSize(),
         ]);
+
         return null;
     }
 
@@ -266,28 +256,17 @@ class ConcursosApiService
      */
     public function getDocumentosInvitacion(int $concursoId): array
     {
-        /* Log::info('API Request Debug - Documentos Invitación', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos",
-            'token_length' => strlen($this->token ?? ''),
-        ]); */
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->get("{$this->apiUrl}/api/concursos/{$concursoId}/documentos"));
 
-        $response = Http::withToken($this->token)
-            ->get("{$this->apiUrl}/api/concursos/{$concursoId}/documentos");
-
-        /* Log::info('API Response Debug - Documentos Invitación', [
-            'status' => $response->status(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
-        
         if ($response->successful()) {
             return $response->json('data') ?? [];
         }
-        
-        Log::error('API: Error al obtener documentos de la invitación', [
-            'status' => $response->status(), 
-            'body' => $response->body()
+
+        $this->registrarError('API: Error al obtener documentos de la invitación', $response, [
+            'concurso_id' => $concursoId,
         ]);
+
         return [];
     }
 
@@ -295,16 +274,10 @@ class ConcursosApiService
      * Descargar documento de concurso
      * Según documentación: GET /api/concursos/{concurso_id}/documentos/{documento_id}/descargar
      */
-    public function descargarDocumentoConcurso(int $concursoId, int $documentoId)
+    public function descargarDocumentoConcurso(int $concursoId, int $documentoId): Response
     {
-        $url = "{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoId}/descargar";
-        
-        /* Log::info('API Request Debug - Descargar Documento', [
-            'url' => $url,
-            'token_length' => strlen($this->token ?? ''),
-        ]); */
-
-        return Http::withToken($this->token)->get($url);
+        return $this->enviar(fn (PendingRequest $http) => $http
+            ->get("{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoId}/descargar"));
     }
 
     /**
@@ -313,18 +286,12 @@ class ConcursosApiService
     public function descargarDocumentoConcursoResponse(int $concursoId, int $documentoId)
     {
         $response = $this->descargarDocumentoConcurso($concursoId, $documentoId);
-        
-        /* Log::info('API Response Debug - Descargar Documento', [
-            'status' => $response->status(),
-            'headers' => $response->headers(),
-            'successful' => $response->successful(),
-        ]); */
-        
+
         if ($response->successful()) {
             // Obtener el nombre del archivo del header Content-Disposition
             $contentDisposition = $response->header('Content-Disposition');
             $filename = 'documento.pdf'; // Default
-            
+
             if ($contentDisposition) {
                 if (preg_match('/filename="([^"]+)"/', $contentDisposition, $matches)) {
                     $filename = $matches[1];
@@ -332,22 +299,22 @@ class ConcursosApiService
                     $filename = $matches[1];
                 }
             }
-            
+
             return response($response->body())
                 ->header('Content-Type', $response->header('Content-Type', 'application/octet-stream'))
                 ->header('Content-Disposition', "attachment; filename=\"{$filename}\"")
                 ->header('Content-Length', strlen($response->body()));
         }
-        
+
         // Si hay error, devolver respuesta de error
         $errorData = $response->json();
         $message = $errorData['message'] ?? 'Error al descargar el documento';
         $status = $response->status();
-        
+
         return response()->json([
             'success' => false,
             'message' => $message,
-            'status' => $status
+            'status' => $status,
         ], $status);
     }
 
@@ -357,36 +324,25 @@ class ConcursosApiService
      */
     public function verificarDocumentoProveedor(int $concursoId, int $documentoTipoId): ?object
     {
-        /* Log::info('API Request Debug - Verificar Documento Proveedor', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoTipoId}/verificar",
-            'token_length' => strlen($this->token ?? ''),
-        ]); */
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->get("{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoTipoId}/verificar"));
 
-        $response = Http::withToken($this->token)
-            ->get("{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoTipoId}/verificar");
-
-        /* Log::info('API Response Debug - Verificar Documento Proveedor', [
-            'status' => $response->status(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
-        
         if ($response->successful()) {
-            $data = $response->json('data') ?? [];
-            return (object) $data;
+            return (object) ($response->json('data') ?? []);
         }
-        
-        Log::error('API: Error al verificar documento de proveedor', [
-            'status' => $response->status(), 
-            'body' => $response->body()
+
+        $this->registrarError('API: Error al verificar documento de proveedor', $response, [
+            'concurso_id' => $concursoId,
+            'documento_tipo_id' => $documentoTipoId,
         ]);
+
         return null;
     }
 
     /**
      * Obtener tipos de documentos de oferta para un concurso específico
      * Según documentación: GET /api/concursos/{concurso_id}/tipos-documentos-oferta
-     * 
+     *
      * Estructura de respuesta:
      * - id: ID del tipo de documento
      * - nombre: Nombre del tipo de documento
@@ -401,32 +357,17 @@ class ConcursosApiService
      */
     public function getTiposDocumentosOferta(int $concursoId): ?array
     {
-        /* Log::info('API Request Debug - Tipos Documentos Oferta', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/tipos-documentos-oferta",
-            'token' => $this->token,
-            'token_length' => strlen($this->token ?? ''),
-            'concurso_id' => $concursoId,
-        ]); */
-        
-        $response = Http::withToken($this->token)
-            ->get("{$this->apiUrl}/api/concursos/{$concursoId}/tipos-documentos-oferta");
-        
-        /* Log::info('API Response Debug - Tipos Documentos Oferta', [
-            'status' => $response->status(),
-            'headers' => $response->headers(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
-        
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->get("{$this->apiUrl}/api/concursos/{$concursoId}/tipos-documentos-oferta"));
+
         if ($response->successful()) {
-            $data = $response->json('data') ?? [];
-            return $data;
+            return $response->json('data') ?? [];
         }
-        
-        Log::error('API: Error al obtener tipos de documentos de oferta', [
-            'status' => $response->status(), 
-            'body' => $response->body()
+
+        $this->registrarError('API: Error al obtener tipos de documentos de oferta', $response, [
+            'concurso_id' => $concursoId,
         ]);
+
         return null;
     }
 
@@ -436,36 +377,24 @@ class ConcursosApiService
      */
     public function eliminarDocumento(int $concursoId, int $documentoId): bool
     {
-        /* Log::info('API Request Debug - Eliminar Documento', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoId}",
-            'token_length' => strlen($this->token ?? ''),
-            'concurso_id' => $concursoId,
-            'documento_id' => $documentoId,
-        ]); */
-
-        $response = Http::withToken($this->token)
-            ->delete("{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoId}");
-
-        /* Log::info('API Response Debug - Eliminar Documento', [
-            'status' => $response->status(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->delete("{$this->apiUrl}/api/concursos/{$concursoId}/documentos/{$documentoId}"));
 
         if ($response->successful()) {
             Log::info('Documento eliminado exitosamente via API', [
+                'user_id' => Auth::id(),
                 'concurso_id' => $concursoId,
                 'documento_id' => $documentoId,
             ]);
+
             return true;
         }
-        
-        Log::error('API: Error al eliminar documento', [
-            'status' => $response->status(), 
-            'body' => $response->body(),
+
+        $this->registrarError('API: Error al eliminar documento', $response, [
             'concurso_id' => $concursoId,
-            'documento_id' => $documentoId
+            'documento_id' => $documentoId,
         ]);
+
         return false;
     }
 
@@ -475,33 +404,22 @@ class ConcursosApiService
      */
     public function darBajaOferta(int $concursoId): bool
     {
-        /* Log::info('API Request Debug - Dar Baja Oferta', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/oferta",
-            'token_length' => strlen($this->token ?? ''),
-            'concurso_id' => $concursoId,
-        ]); */
-
-        $response = Http::withToken($this->token)
-            ->delete("{$this->apiUrl}/api/concursos/{$concursoId}/oferta");
-
-        /* Log::info('API Response Debug - Dar Baja Oferta', [
-            'status' => $response->status(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->delete("{$this->apiUrl}/api/concursos/{$concursoId}/oferta"));
 
         if ($response->successful()) {
             Log::info('Oferta dada de baja exitosamente via API', [
+                'user_id' => Auth::id(),
                 'concurso_id' => $concursoId,
             ]);
+
             return true;
         }
-        
-        Log::error('API: Error al dar de baja oferta', [
-            'status' => $response->status(), 
-            'body' => $response->body(),
-            'concurso_id' => $concursoId
+
+        $this->registrarError('API: Error al dar de baja oferta', $response, [
+            'concurso_id' => $concursoId,
         ]);
+
         return false;
     }
 
@@ -511,30 +429,17 @@ class ConcursosApiService
      */
     public function getDocumentosAdicionales(int $concursoId): array
     {
-        /* Log::info('API Request Debug - Documentos Adicionales', [
-            'url' => "{$this->apiUrl}/api/concursos/{$concursoId}/documentos-adicionales",
-            'token' => $this->token,
-            'token_length' => strlen($this->token ?? ''),
-            'concurso_id' => $concursoId,
-        ]); */
-        
-        $response = Http::withToken($this->token)
-            ->get("{$this->apiUrl}/api/concursos/{$concursoId}/documentos-adicionales");
-        
-        /* Log::info('API Response Debug - Documentos Adicionales', [
-            'status' => $response->status(),
-            'body_preview' => substr($response->body(), 0, 500),
-            'successful' => $response->successful(),
-        ]); */
-        
+        $response = $this->enviar(fn (PendingRequest $http) => $http
+            ->get("{$this->apiUrl}/api/concursos/{$concursoId}/documentos-adicionales"));
+
         if ($response->successful()) {
             return $response->json('data') ?? [];
         }
-        
-        Log::error('API: Error al obtener documentos adicionales', [
-            'status' => $response->status(), 
-            'body' => $response->body()
+
+        $this->registrarError('API: Error al obtener documentos adicionales', $response, [
+            'concurso_id' => $concursoId,
         ]);
+
         return [];
     }
-} 
+}
