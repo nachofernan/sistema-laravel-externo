@@ -65,3 +65,24 @@ nada lo renovaba. El modal no mostraba el error. Ver `docs/VULNERABILIDADES.md` 
 - **Sin cambios en el front:** las vistas se están actualizando en otro lado. Mostrar el error de
   intención en el modal queda pendiente para cuando se integre ese trabajo. Por ahora los logs de
   error de la API suman `user_id` y `concurso_id`, para poder reconstruir un incidente.
+
+---
+
+## 2026-11-25 — Formulario de un día para la 2° Ronda de Negocios (`/formularioprovincia`)
+
+**Contexto:** BAESA y BAGSA comparten stand en la "2° Ronda de Negocios de Energía y Minería" de la
+Provincia de Buenos Aires. Los proveedores llegan por un QR impreso en una lona. La maqueta original
+está en `docs/form/index.html`.
+
+**Decisiones:**
+- **Se guarda local, como JSON,** en `registros_formulario_provincia.datos`. No es dato de negocio
+  de la API interna (axioma 2): es una lista de contactos de un evento que se lee directo de la base
+  cuando termina. La forma de exportarla se decide después.
+- **Sin correo y sin campos obligatorios.** Se aceptan filas incompletas o vacías.
+- **2 envíos sobre 1 fila:** el Paso 1 crea la fila y guarda su id en la sesión. El Paso 2
+  (opcional) actualiza esa fila y toma el id solo de la sesión, nunca del request.
+- **Sin rate limit, honeypot ni Turnstile,** por decisión explícita del dueño del proyecto: dura un
+  día, y en el evento mucha gente comparte IP. Queda en tensión con el axioma 5 y se anota como
+  V18 en `docs/VULNERABILIDADES.md`.
+- **Se apaga con `FORMULARIO_PROVINCIA_ACTIVO=false`** (404). El valor por defecto es apagado.
+- **Rubros fijos en el JS,** sin las tablas `categorias_rubro`/`rubros` que proponía la maqueta (YAGNI).

@@ -1,0 +1,928 @@
+<!doctype html>
+<!--
+============================================================================
+  MAQUETA · Registro de proveedores BAESA / BAGSA
+  Contexto y reglas para implementarlo en el proyecto Laravel real
+============================================================================
+
+CONTEXTO
+- Evento: "2° Ronda de Negocios de Energía y Minería" (Provincia de Buenos Aires),
+  lema "Integración con valor agregado bonaerense". BAESA (Buenos Aires Energía S.A.)
+  y BAGSA (Buenos Aires Gas S.A.) comparten stand. Los proveedores entran por QR
+  desde el celular → todo tiene que funcionar primero en mobile.
+- Esto es una maqueta estática: los envíos son simulados (setTimeout). No hay backend.
+- Orden de las marcas: SIEMPRE primero BAESA y después BAGSA (logos, textos, selector, pie).
+- Logos: PNG blancos con fondo transparente → siempre sobre fondo oscuro (navy).
+
+FLUJO
+1. Registro rápido (obligatorio): razón social, CUIT / ID fiscal, contacto, email,
+   teléfono, empresa de interés (Ambas | BAESA | BAGSA) y rubros.
+   Rubros: al menos uno de la lista O el texto libre "Otro rubro".
+2. Pantalla de confirmación → opción "Completar más información" o "Listo por ahora".
+3. Perfil ampliado (todo opcional): domicilio, localidad, provincia, condición IVA,
+   tamaño, empleados, web, productos/servicios, principales clientes y 3 antecedentes
+   (Registro de Proveedores PBA, experiencia en sector energético, certificaciones ISO).
+4. Pantalla final con "Registrar otra empresa" (resetea todo; pensado para una tablet en el stand).
+
+REGLAS / DECISIONES TOMADAS
+- CUIT / ID fiscal: texto libre, SIN máscara ni validación de formato
+  (puede haber proveedores extranjeros). Solo obligatorio.
+- NO hay: checkbox de Ley 25.326, carga de PDF, ni número de registro. Se sacaron a propósito.
+- Rubros: 7 categorías con ~75 ítems (ver const CATEGORIAS en el script; salió de rubros.txt).
+  En Laravel → tablas categorias_rubro / rubros + pivot con el proveedor, más un campo
+  "otro_rubro" de texto libre. "nombre" e "ej" de cada categoría son textos de UI
+  (nombre corto + ejemplos) para que se entienda de un vistazo.
+
+CORREO
+- UN solo correo por registro, el MISMO para el proveedor (To) y para Compras de
+  BAESA y BAGSA (CC). Direcciones de Compras: a definir.
+- Cuándo se envía (para que incluya el perfil ampliado si lo completó, sin duplicar):
+    · Al "Enviar registro" (paso 1): se guarda el registro y se despacha un Job
+      con delay (~15 min) como respaldo.
+    · Al "Guardar perfil" u "Omitir/Listo por ahora": se despacha el Job inmediato.
+    · El Job es idempotente: si registro.correo_enviado_at no es null, no hace nada;
+      si envía, setea correo_enviado_at = now().
+  → Requiere cola de trabajos en el servidor (queue:work). Alternativa equivalente si no
+    se puede: comando programado cada 5 min que envíe los registros sin correo con
+    más de 15 min de antigüedad.
+- Por eso la confirmación dice "Vas a recibir una confirmación…" (no "te enviamos").
+- Plantilla: ver buildEmail() en el script. Está hecha con tablas + estilos inline
+  (compatible Outlook/Gmail) → pasarla a una vista Blade del Mailable.
+  En el correo real los logos van con URL absoluta (acá son rutas relativas).
+  Si no completó el perfil, esas secciones simplemente no aparecen.
+
+QUITAR EN PRODUCCIÓN (solo demo)
+- Botones .demo-only ("Ver correo enviado"), el modal #mail-modal, sus estilos
+  (bloque "DEMO" en el CSS) y openMail()/closeMail() en el script.
+============================================================================
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Registro de Proveedores · BAESA · BAGSA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy-900: #071526;
+    --navy-800: #0b1f3a;
+    --navy-700: #12305a;
+    --accent: #1ea7e1;
+    --accent-2: #4fd1c5;
+    --accent-ink: #0b6fa0;
+    --bg: #eef2f7;
+    --card: #ffffff;
+    --ink: #0f1b2d;
+    --muted: #5b6b80;
+    --line: #d7dfe9;
+    --soft: #f5f8fb;
+    --ok: #12a26b;
+    --err: #d64545;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; overflow-x: clip; }
+  body {
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.45;
+  }
+
+  /* ---------- Header ---------- */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(900px 400px at 85% -10%, rgba(30,167,225,.35), transparent 60%),
+      radial-gradient(700px 380px at -10% 110%, rgba(79,209,197,.22), transparent 60%),
+      linear-gradient(160deg, var(--navy-800), var(--navy-900));
+    color: #fff;
+    padding: 28px 16px 92px;
+  }
+  .hero::after {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+    background-size: 36px 36px;
+    mask-image: linear-gradient(to bottom, #000 30%, transparent);
+    pointer-events: none;
+  }
+  .hero-inner { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; text-align: center; }
+  .logos { display: flex; align-items: center; justify-content: center; gap: 24px; margin-bottom: 22px; }
+  .logos img { height: 56px; width: auto; max-width: 40vw; object-fit: contain; }
+  .logos .sep { width: 1px; height: 44px; background: rgba(255,255,255,.35); }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+    padding: 6px 12px; border-radius: 999px; text-align: left;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18);
+  }
+  .badge .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); box-shadow: 0 0 0 4px rgba(79,209,197,.25); }
+  .lema { display: block; margin-top: 10px; font-size: 13px; font-style: italic; color: rgba(255,255,255,.6); }
+  .hero h1 { font-size: clamp(26px, 6vw, 40px); line-height: 1.12; margin: 14px 0 10px; font-weight: 800; letter-spacing: -.02em; }
+  .hero p { margin: 0 auto; max-width: 520px; color: rgba(255,255,255,.78); font-size: 15.5px; }
+
+  /* ---------- Layout ---------- */
+  main { max-width: 760px; margin: -64px auto 40px; padding: 0 16px; position: relative; z-index: 2; }
+  .card {
+    background: var(--card);
+    border-radius: 20px;
+    box-shadow: 0 20px 50px -20px rgba(7,21,38,.35), 0 2px 6px rgba(7,21,38,.06);
+    padding: 26px 18px;
+  }
+  @media (min-width: 640px) { .card { padding: 34px 38px; } }
+
+  .steps { display: flex; gap: 8px; margin-bottom: 22px; }
+  .steps .s { flex: 1; height: 5px; border-radius: 99px; background: var(--line); overflow: hidden; position: relative; }
+  .steps .s i { position: absolute; inset: 0; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .6s ease; }
+  .steps .s.on i { width: 100%; }
+  .step-label { font-size: 12px; font-weight: 700; color: var(--accent-ink); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 4px; }
+  h2 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 22px; font-size: 14.5px; }
+
+  /* ---------- Form ---------- */
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .field { min-width: 0; }
+  @media (min-width: 640px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .full { grid-column: 1 / -1; } }
+  .field label, .group-label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+  .req { color: var(--err); }
+  .opt { color: var(--muted); font-weight: 500; }
+  input[type=text], input[type=email], input[type=tel], input[type=url], input[type=search], select, textarea {
+    width: 100%; font: inherit; font-size: 16px; color: var(--ink);
+    padding: 12px 14px; border-radius: 12px;
+    border: 1.5px solid var(--line); background: #fbfcfe;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 4px rgba(30,167,225,.15); }
+  .invalid { border-color: var(--err) !important; box-shadow: 0 0 0 4px rgba(214,69,69,.12) !important; }
+
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label {
+    margin: 0; text-align: center; cursor: pointer; font-weight: 600; font-size: 14px;
+    padding: 12px 8px; border-radius: 12px; border: 1.5px solid var(--line); background: #fbfcfe;
+    transition: all .15s;
+  }
+  .seg input:checked + label { border-color: var(--accent); background: rgba(30,167,225,.08); color: var(--accent-ink); }
+  .seg input:focus-visible + label { box-shadow: 0 0 0 4px rgba(30,167,225,.2); }
+
+  /* ---------- Rubros ---------- */
+  .rubros-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .count { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .count b { color: var(--accent-ink); }
+  .rubros-help { font-size: 13px; color: var(--muted); margin: -2px 0 10px; }
+  .search-wrap { position: relative; }
+  .search-wrap svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; stroke: var(--muted); fill: none; stroke-width: 2; pointer-events: none; }
+  .search-wrap input { padding-left: 40px; }
+
+  .tray { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+  .tray:empty { display: none; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--navy-800); color: #fff; border: 0;
+    font: inherit; font-size: 12.5px; font-weight: 600;
+    padding: 5px 6px 5px 11px; border-radius: 999px; cursor: pointer;
+    animation: pop .2s ease;
+  }
+  .tag i { font-style: normal; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.18); font-size: 13px; line-height: 1; }
+  .tag:hover i { background: rgba(255,255,255,.32); }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .cats { margin-top: 12px; border: 1.5px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .cats.invalid-box { border-color: var(--err); box-shadow: 0 0 0 4px rgba(214,69,69,.12); }
+  .cat + .cat { border-top: 1px solid var(--line); }
+  .cat-head {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    padding: 13px 14px; background: #fff; border: 0; cursor: pointer;
+    font: inherit; color: var(--ink); text-align: left;
+  }
+  .cat-head:hover { background: var(--soft); }
+  .cat-ico { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: rgba(30,167,225,.1); }
+  .cat-ico svg { width: 19px; height: 19px; stroke: var(--accent-ink); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .cat-txt { flex: 1; min-width: 0; }
+  .cat-txt strong { display: block; font-size: 14.5px; font-weight: 700; }
+  .cat-txt small { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+  .cat-n { flex: none; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: var(--soft); color: var(--muted); }
+  .cat-n.has { background: var(--navy-800); color: #fff; }
+  .chev { flex: none; width: 18px; height: 18px; stroke: var(--muted); fill: none; stroke-width: 2.2; transition: transform .2s; }
+  .cat.open .chev { transform: rotate(180deg); }
+  .cat.open .cat-head { background: var(--soft); }
+  .cat-body { display: none; padding: 4px 14px 16px; background: var(--soft); }
+  .cat.open .cat-body { display: block; }
+  .cat-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+  .linkbtn { background: none; border: 0; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--accent-ink); cursor: pointer; padding: 4px 0; }
+  .linkbtn:hover { text-decoration: underline; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    border: 1.5px solid var(--line); background: #fff; color: var(--ink);
+    font: inherit; font-size: 13.5px; font-weight: 500;
+    padding: 7px 12px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; text-align: left;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .chip:hover { border-color: #b4c3d6; }
+  .chip svg { width: 14px; height: 14px; display: none; flex: none; }
+  .chip[aria-pressed=true] { background: var(--navy-800); border-color: var(--navy-800); color: #fff; }
+  .chip[aria-pressed=true] svg { display: block; }
+  .chip mark { background: rgba(30,167,225,.25); color: inherit; border-radius: 3px; padding: 0 1px; }
+  .chip[aria-pressed=true] mark { background: rgba(79,209,197,.4); }
+  .noresults { display: none; padding: 18px 14px; font-size: 14px; color: var(--muted); text-align: center; }
+  .cats.empty .noresults { display: block; }
+
+  .otro { margin-top: 12px; }
+
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--ink); cursor: pointer; }
+  .check input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--accent-ink); flex: none; }
+
+  .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
+  @media (min-width: 640px) { .actions { flex-direction: row-reverse; justify-content: flex-start; } }
+  .btn {
+    font: inherit; font-weight: 700; font-size: 16px; cursor: pointer;
+    border: 0; border-radius: 12px; padding: 15px 22px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    transition: transform .1s, box-shadow .15s, background .15s, opacity .15s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { color: #fff; background: linear-gradient(135deg, var(--accent), #1386c0); box-shadow: 0 10px 22px -10px rgba(19,134,192,.8); }
+  .btn-primary:hover { box-shadow: 0 14px 26px -10px rgba(19,134,192,.9); }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1.5px solid var(--line); }
+  .btn-ghost:hover { color: var(--ink); border-color: #b4c3d6; }
+  .btn[disabled] { opacity: .85; cursor: progress; }
+  .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid rgba(255,255,255,.4); border-top-color: #fff; animation: spin .7s linear infinite; display: none; }
+  .loading .spinner { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Vistas ---------- */
+  .view { display: none; animation: fadeUp .45s ease both; }
+  .view.active { display: block; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+  .success { text-align: center; padding: 8px 0; }
+  .tick { width: 76px; height: 76px; margin: 4px auto 18px; border-radius: 50%; background: rgba(18,162,107,.12); display: grid; place-items: center; }
+  .tick svg { width: 40px; height: 40px; }
+  .tick path { stroke: var(--ok); stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: draw .6s .15s ease forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .summary { text-align: left; background: var(--soft); border-radius: 12px; padding: 14px 16px; font-size: 14px; margin: 0 0 20px; }
+  .summary div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+  .summary div span:first-child { color: var(--muted); flex: none; }
+  .summary div span:last-child { font-weight: 600; text-align: right; }
+
+  .more-cta {
+    text-align: left; display: flex; gap: 14px; align-items: center;
+    padding: 16px; border-radius: 14px; margin-bottom: 4px;
+    background: linear-gradient(135deg, rgba(30,167,225,.09), rgba(79,209,197,.09));
+    border: 1px solid rgba(30,167,225,.25);
+  }
+  .more-cta .ico { flex: none; width: 42px; height: 42px; border-radius: 12px; background: var(--navy-800); display: grid; place-items: center; }
+  .more-cta .ico svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2; }
+  .more-cta p { margin: 0; font-size: 14px; color: var(--muted); }
+  .more-cta strong { display: block; color: var(--ink); font-size: 15px; }
+
+  .section-title { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 26px 0 12px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .section-title:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 32px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 120px);
+    background: var(--navy-800); color: #fff; padding: 12px 18px; border-radius: 12px;
+    font-size: 14px; font-weight: 600; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    transition: transform .35s ease; z-index: 50; max-width: calc(100% - 32px);
+  }
+  .toast.show { transform: translate(-50%, 0); }
+
+  /* ---------- DEMO: vista previa del correo (quitar en producción) ---------- */
+  .demo-only {
+    width: 100%; margin-top: 14px; padding: 11px 14px;
+    font: inherit; font-size: 13.5px; font-weight: 700; color: #8a5a00; cursor: pointer;
+    background: #fff8e6; border: 1.5px dashed #e3b341; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .demo-only:hover { background: #fff1cc; }
+  .demo-only small { font-size: 10.5px; letter-spacing: .08em; background: #e3b341; color: #fff; padding: 2px 6px; border-radius: 4px; }
+
+  .modal { position: fixed; inset: 0; z-index: 100; display: none; background: rgba(7,21,38,.6); backdrop-filter: blur(3px); padding: 24px 16px; overflow-y: auto; }
+  .modal.open { display: block; animation: fadeIn .2s ease; }
+  @keyframes fadeIn { from { opacity: 0; } }
+  .mail-win { max-width: 720px; margin: 0 auto; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.4); }
+  .mail-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: var(--navy-800); color: #fff; font-size: 13px; font-weight: 700; }
+  .mail-bar button { background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 8px; width: 32px; height: 32px; font-size: 18px; cursor: pointer; }
+  .mail-meta { padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 13.5px; display: grid; gap: 5px; }
+  .mail-meta div { display: grid; grid-template-columns: 62px minmax(0,1fr); gap: 8px; }
+  .mail-meta span:first-child { color: var(--muted); }
+  .mail-meta span:last-child { overflow-wrap: anywhere; }
+  .mail-meta .subj { font-weight: 700; }
+  .mail-win iframe { display: block; width: 100%; border: 0; background: #eef2f7; }
+  @media (max-width: 520px) { .modal { padding: 0; } .mail-win { border-radius: 0; min-height: 100%; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="logos">
+      <img src="logo_50b.png" alt="BAESA · Buenos Aires Energía S.A.">
+      <span class="sep" aria-hidden="true"></span>
+      <img src="Logo-BAGSA-blanco-300x149-1.png" alt="BAGSA · Buenos Aires Gas S.A.">
+    </div>
+    <span class="badge"><span class="dot"></span>2° Ronda de Negocios de Energía y Minería</span>
+    <span class="lema">“Integración con valor agregado bonaerense”</span>
+    <h1>Sumate como proveedor</h1>
+    <p>Dejanos tus datos en menos de un minuto y te contactamos para las próximas compras y contrataciones de BAESA y BAGSA.</p>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="steps" aria-hidden="true">
+      <div class="s on" id="bar1"><i></i></div>
+      <div class="s" id="bar2"><i></i></div>
+    </div>
+
+    <!-- ============ PASO 1: Registro rápido ============ -->
+    <section class="view active" id="v-quick">
+      <p class="step-label">Paso 1 · Registro rápido</p>
+      <h2>Datos de contacto</h2>
+      <p class="sub">Solo lo esencial. Podés ampliar la información después.</p>
+
+      <form id="f-quick" novalidate>
+        <div class="grid">
+          <div class="field full">
+            <label for="razon">Razón social <span class="req">*</span></label>
+            <input type="text" id="razon" autocomplete="organization" placeholder="Ej.: Servicios Eléctricos del Sur S.R.L." required>
+          </div>
+          <div class="field">
+            <label for="cuit">CUIT / ID fiscal <span class="req">*</span></label>
+            <input type="text" id="cuit" placeholder="30-12345678-9 o ID extranjero" required>
+          </div>
+          <div class="field">
+            <label for="contacto">Nombre y apellido <span class="req">*</span></label>
+            <input type="text" id="contacto" autocomplete="name" placeholder="Persona de contacto" required>
+          </div>
+          <div class="field">
+            <label for="email">Email <span class="req">*</span></label>
+            <input type="email" id="email" autocomplete="email" placeholder="compras@empresa.com.ar" required>
+          </div>
+          <div class="field">
+            <label for="tel">Teléfono / WhatsApp <span class="req">*</span></label>
+            <input type="tel" id="tel" autocomplete="tel" placeholder="221 555-1234" required>
+          </div>
+
+          <div class="field full">
+            <span class="group-label">¿A qué empresa te interesa proveer?</span>
+            <div class="seg" role="radiogroup">
+              <input type="radio" name="empresa" id="e-ambas" value="Ambas" checked><label for="e-ambas">Ambas</label>
+              <input type="radio" name="empresa" id="e-baesa" value="BAESA"><label for="e-baesa">BAESA</label>
+              <input type="radio" name="empresa" id="e-bagsa" value="BAGSA"><label for="e-bagsa">BAGSA</label>
+            </div>
+          </div>
+
+          <div class="field full">
+            <div class="rubros-head">
+              <span class="group-label">Rubros <span class="req">*</span></span>
+              <span class="count"><b id="rcount">0</b> seleccionados</span>
+            </div>
+            <p class="rubros-help">Buscá por palabra o abrí una categoría. Podés elegir varios.</p>
+            <div class="search-wrap">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              <input type="search" id="rfilter" placeholder="Ej.: válvulas, transformadores, EPP…" aria-label="Buscar rubro" autocomplete="off">
+            </div>
+            <div class="tray" id="tray" aria-live="polite"></div>
+            <div class="cats" id="cats">
+              <div class="noresults">No encontramos ese rubro. Escribilo abajo en “Otro rubro”.</div>
+            </div>
+            <div class="otro">
+              <label for="otro">Otro rubro <span class="opt">(si no está en la lista)</span></label>
+              <input type="text" id="otro" placeholder="Describí brevemente qué ofrecés">
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn btn-primary" id="b-quick"><span class="spinner"></span><span class="txt">Enviar registro</span></button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============ CONFIRMACIÓN ============ -->
+    <section class="view" id="v-ok">
+      <div class="success">
+        <div class="tick"><svg viewBox="0 0 40 40"><path d="M11 21l6 6 12-14"/></svg></div>
+        <h2>¡Gracias, <span id="ok-name"></span>!</h2>
+        <p class="sub">Recibimos tus datos. Vas a recibir una confirmación en <strong id="ok-mail"></strong>.</p>
+
+        <div class="summary" id="ok-summary"></div>
+
+        <div class="more-cta">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div>
+            <strong>¿Querés destacarte?</strong>
+            <p>Completá el perfil de tu empresa: ubicación, tamaño, experiencia y certificaciones.</p>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="b-more">Completar más información</button>
+          <button type="button" class="btn btn-ghost" id="b-done">Listo por ahora</button>
+        </div>
+        <button type="button" class="demo-only" data-mail><small>DEMO</small> Ver correo enviado</button>
+      </div>
+    </section>
+
+    <!-- ============ PASO 2: Más información ============ -->
+    <section class="view" id="v-more">
+      <p class="step-label">Paso 2 · Perfil completo <span class="opt">(opcional)</span></p>
+      <h2 id="more-title">Contanos más sobre tu empresa</h2>
+      <p class="sub">Todos los campos son opcionales. Cuanto más completo, mejor te podemos tener en cuenta.</p>
+
+      <form id="f-more" novalidate>
+        <p class="section-title">Ubicación</p>
+        <div class="grid">
+          <div class="field full">
+            <label for="dir">Domicilio comercial</label>
+            <input type="text" id="dir" autocomplete="street-address" placeholder="Calle, número, piso">
+          </div>
+          <div class="field">
+            <label for="loc">Localidad</label>
+            <input type="text" id="loc" autocomplete="address-level2" placeholder="La Plata">
+          </div>
+          <div class="field">
+            <label for="prov">Provincia</label>
+            <select id="prov">
+              <option selected>Buenos Aires</option>
+              <option>CABA</option>
+              <option>Catamarca</option><option>Chaco</option><option>Chubut</option><option>Córdoba</option>
+              <option>Corrientes</option><option>Entre Ríos</option><option>Formosa</option><option>Jujuy</option>
+              <option>La Pampa</option><option>La Rioja</option><option>Mendoza</option><option>Misiones</option>
+              <option>Neuquén</option><option>Río Negro</option><option>Salta</option><option>San Juan</option>
+              <option>San Luis</option><option>Santa Cruz</option><option>Santa Fe</option><option>Santiago del Estero</option>
+              <option>Tierra del Fuego</option><option>Tucumán</option>
+            </select>
+          </div>
+        </div>
+
+        <p class="section-title">Perfil de la empresa</p>
+        <div class="grid">
+          <div class="field">
+            <label for="iva">Condición frente al IVA</label>
+            <select id="iva">
+              <option value="">Seleccionar…</option>
+              <option>Responsable Inscripto</option>
+              <option>Monotributista</option>
+              <option>Exento</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="tam">Tamaño</label>
+            <select id="tam">
+              <option value="">Seleccionar…</option>
+              <option>Micro</option>
+              <option>Pequeña</option>
+              <option>Mediana tramo 1</option>
+              <option>Mediana tramo 2</option>
+              <option>Grande</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="web">Sitio web</label>
+            <input type="url" id="web" placeholder="https://">
+          </div>
+          <div class="field">
+            <label for="emp">Cantidad de empleados</label>
+            <select id="emp">
+              <option value="">Seleccionar…</option>
+              <option>1 a 10</option><option>11 a 50</option><option>51 a 200</option><option>Más de 200</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label for="desc">Productos y servicios que ofrecen</label>
+            <textarea id="desc" placeholder="Breve descripción de lo que hacen, marcas que representan, zonas de cobertura…"></textarea>
+          </div>
+        </div>
+
+        <p class="section-title">Antecedentes</p>
+        <div class="grid">
+          <div class="field full" style="display:grid;gap:10px">
+            <label class="check"><input type="checkbox" id="a-reg"> Inscripta en el Registro de Proveedores de la Provincia de Buenos Aires</label>
+            <label class="check"><input type="checkbox" id="a-sector"> Proveedor actual o anterior de empresas del sector energético</label>
+            <label class="check"><input type="checkbox" id="a-iso"> Cuenta con certificaciones (ISO 9001, 14001, 45001, etc.)</label>
+          </div>
+          <div class="field full">
+            <label for="clientes">Principales clientes</label>
+            <input type="text" id="clientes" placeholder="Ej.: municipios, distribuidoras, cooperativas…">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn btn-primary" id="b-send-more"><span class="spinner"></span><span class="txt">Guardar perfil</span></button>
+          <button type="button" class="btn btn-ghost" id="b-skip">Omitir</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============ FIN ============ -->
+    <section class="view" id="v-end">
+      <div class="success">
+        <div class="tick"><svg viewBox="0 0 40 40"><path d="M11 21l6 6 12-14"/></svg></div>
+        <h2>¡Todo listo!</h2>
+        <p class="sub">Tu empresa quedó registrada. El equipo de Compras de BAESA y BAGSA se va a comunicar cuando surja una oportunidad en tus rubros.</p>
+        <p class="sub" style="margin:0">¡Gracias por visitarnos en el stand!</p>
+        <div class="actions" style="justify-content:center">
+          <button type="button" class="btn btn-ghost" id="b-restart">Registrar otra empresa</button>
+        </div>
+        <button type="button" class="demo-only" data-mail><small>DEMO</small> Ver correo enviado</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  Buenos Aires Energía S.A. · Buenos Aires Gas S.A.
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- DEMO: vista previa del correo (quitar en producción) -->
+<div class="modal" id="mail-modal" role="dialog" aria-modal="true" aria-label="Vista previa del correo">
+  <div class="mail-win">
+    <div class="mail-bar"><span>Vista previa del correo</span><button type="button" id="mail-close" aria-label="Cerrar">×</button></div>
+    <div class="mail-meta">
+      <div><span>De</span><span>Compras BAESA · BAGSA &lt;no-responder@…&gt;</span></div>
+      <div><span>Para</span><span id="m-to"></span></div>
+      <div><span>CC</span><span>Compras BAESA &lt;compras@…&gt;, Compras BAGSA &lt;compras@…&gt;</span></div>
+      <div><span>Asunto</span><span class="subj" id="m-subj"></span></div>
+    </div>
+    <iframe id="mail-frame" title="Cuerpo del correo"></iframe>
+  </div>
+</div>
+
+<script>
+  // ---- Rubros (de rubros.txt; en Laravel vendrían de la base) ----
+  // "nombre" es el título corto que se muestra; "ej" es un resumen para que se entienda de un vistazo.
+  const CATEGORIAS = [
+    { nombre: "Energía, electricidad y automatización", ej: "Transformadores, MT, generadores, PLC…", icon: "bolt",
+      items: ["Transformadores", "Equipos eléctricos e Instalaciones", "Conductores eléctricos y Accesorios",
+        "Elementos de maniobra MT", "Montajes eléctricos", "Motores eléctricos", "Generadores y Grupos Electrógenos",
+        "UPS y Sistemas de energía", "Automatismos, control y PLC", "Calibración de protecciones", "Iluminación", "Termocuplas"] },
+    { nombre: "Equipos rotantes, mecánica e hidráulica", ej: "Turbinas, bombas, compresores, válvulas…", icon: "gear",
+      items: ["Turbinas de gas", "Turbinas de vapor", "Bombas", "Compresores", "Calderas y Chimeneas",
+        "Intercambiadores de calor", "Balanceo de equipos rotantes", "Multiplicadores y Reductores",
+        "Cojinetes y Rodamientos", "Válvulas", "Hidráulica", "Embragues y frenos industriales", "Radiadores y Enfriadores"] },
+    { nombre: "Materiales, metalurgia y reparaciones", ej: "Caños, tornería, mecanizados, aislaciones…", icon: "wrench",
+      items: ["Tubos, Caños e Insumos metalúrgicos pesados", "Mecanizados y Construcciones metálicas", "Tornería",
+        "Fundidoras y Metalúrgicas", "Ferretería industrial", "Aislaciones", "Empaquetaduras", "Filtros industriales"] },
+    { nombre: "Montajes, obras y servicios de planta", ej: "Obras civiles, andamios, izaje, anticorrosivos…", icon: "crane",
+      items: ["Montajes industriales", "Obras civiles", "Andamios", "Medios de elevación e Izaje",
+        "Montacargas y ascensores", "Tratamientos superficiales y Térmicos", "Protección anticorrosiva y Catódica", "Limpieza industrial"] },
+    { nombre: "Seguridad, ambiente y salud (HSE)", ej: "EPP, incendio, residuos, medicina laboral…", icon: "shield",
+      items: ["Equipos de protección personal (EPP)", "Ropa de trabajo", "Sistemas contra incendio", "Extintores y matafuegos",
+        "Control de plagas", "Estudios y Monitoreos ambientales", "Permisos y Declaraciones de residuos",
+        "Gestión de residuos industriales", "Medicina laboral y Servicios médicos", "Auditorías"] },
+    { nombre: "Insumos industriales, logística y combustibles", ej: "Combustibles, lubricantes, químicos, fletes…", icon: "truck",
+      items: ["Combustibles y Tanques", "Lubricantes, aceites y grasas", "Gases industriales", "Productos químicos industriales",
+        "Baterías", "Carbones", "Planta de ósmosis inversa", "Transporte y Fletes", "Automotores"] },
+    { nombre: "Servicios generales y profesionales", ej: "Consultoría, sistemas, seguros, catering, librería…", icon: "briefcase",
+      items: ["Honorarios profesionales", "Consultoría", "Capacitaciones", "Sistemas y Comunicaciones", "Laboratorios y Ensayos",
+        "Seguros", "Alquileres", "Hospedaje y Transporte (Pasajes)", "Catering", "Servicios públicos", "Correo y Suscripciones",
+        "Mobiliario de oficina", "Insumos de librería", "Regalos y Servicios empresariales", "Limpieza general"] },
+  ];
+
+  const ICONS = {
+    bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z"/>',
+    crane: '<path d="M4 21V5l8-2v18M4 9h16M16 9v5M14 14h4v3h-4zM2 21h12"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>',
+    truck: '<path d="M1 4h14v12H1zM15 9h4l3 3v4h-7"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/>',
+    briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 13h20"/>',
+  };
+
+  const $ = (s) => document.querySelector(s);
+  const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const esc = (s) => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const catsEl = $("#cats"), trayEl = $("#tray");
+  const selected = new Set();
+  const checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>';
+  const chev = '<svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>';
+
+  // Render categorías
+  CATEGORIAS.forEach((cat, ci) => {
+    const el = document.createElement("div");
+    el.className = "cat"; el.dataset.ci = ci;
+    el.innerHTML = `
+      <button type="button" class="cat-head" aria-expanded="false">
+        <span class="cat-ico"><svg viewBox="0 0 24 24">${ICONS[cat.icon]}</svg></span>
+        <span class="cat-txt"><strong>${esc(cat.nombre)}</strong><small>${esc(cat.ej)}</small></span>
+        <span class="cat-n">${cat.items.length}</span>
+        ${chev}
+      </button>
+      <div class="cat-body">
+        <div class="cat-tools"><button type="button" class="linkbtn">Seleccionar todos</button></div>
+        <div class="chips"></div>
+      </div>`;
+    const chips = el.querySelector(".chips");
+    cat.items.forEach(r => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "chip"; b.setAttribute("aria-pressed", "false");
+      b.dataset.rubro = r; b.dataset.n = norm(r);
+      b.innerHTML = checkSvg + "<span>" + esc(r) + "</span>";
+      b.addEventListener("click", () => toggle(r, b.getAttribute("aria-pressed") !== "true"));
+      chips.appendChild(b);
+    });
+    el.querySelector(".cat-head").addEventListener("click", () => {
+      const open = !el.classList.contains("open");
+      el.classList.toggle("open", open);
+      el.querySelector(".cat-head").setAttribute("aria-expanded", open);
+    });
+    el.querySelector(".linkbtn").addEventListener("click", () => {
+      const visibles = [...chips.querySelectorAll(".chip")].filter(c => c.style.display !== "none");
+      const allOn = visibles.every(c => c.getAttribute("aria-pressed") === "true");
+      visibles.forEach(c => toggle(c.dataset.rubro, !allOn, true));
+      refresh();
+    });
+    catsEl.appendChild(el);
+  });
+
+  function toggle(r, on, silent) {
+    on ? selected.add(r) : selected.delete(r);
+    catsEl.querySelectorAll(".chip").forEach(c => { if (c.dataset.rubro === r) c.setAttribute("aria-pressed", on); });
+    if (!silent) refresh();
+  }
+
+  function refresh() {
+    $("#rcount").textContent = selected.size;
+    catsEl.classList.remove("invalid-box");
+    // contador por categoría + texto del botón "seleccionar todos"
+    catsEl.querySelectorAll(".cat").forEach(el => {
+      const cat = CATEGORIAS[el.dataset.ci];
+      const n = cat.items.filter(i => selected.has(i)).length;
+      const badge = el.querySelector(".cat-n");
+      badge.textContent = n ? `${n} / ${cat.items.length}` : cat.items.length;
+      badge.classList.toggle("has", n > 0);
+      const visibles = [...el.querySelectorAll(".chip")].filter(c => c.style.display !== "none");
+      el.querySelector(".linkbtn").textContent =
+        visibles.length && visibles.every(c => c.getAttribute("aria-pressed") === "true") ? "Quitar todos" : "Seleccionar todos";
+    });
+    // bandeja de seleccionados
+    trayEl.innerHTML = "";
+    selected.forEach(r => {
+      const t = document.createElement("button");
+      t.type = "button"; t.className = "tag"; t.title = "Quitar";
+      t.innerHTML = "<span>" + esc(r) + "</span><i>×</i>";
+      t.addEventListener("click", () => toggle(r, false));
+      trayEl.appendChild(t);
+    });
+  }
+
+  // Buscador: filtra en todas las categorías y abre las que tienen coincidencias
+  $("#rfilter").addEventListener("input", (e) => {
+    const q = norm(e.target.value.trim());
+    let total = 0;
+    catsEl.querySelectorAll(".cat").forEach(el => {
+      const catMatch = q && norm(CATEGORIAS[el.dataset.ci].nombre).includes(q);
+      let hits = 0;
+      el.querySelectorAll(".chip").forEach(c => {
+        const hit = !q || catMatch || c.dataset.n.includes(q);
+        c.style.display = hit ? "" : "none";
+        const span = c.querySelector("span");
+        const txt = c.dataset.rubro;
+        if (q && !catMatch && hit) {
+          const i = c.dataset.n.indexOf(q);
+          span.innerHTML = esc(txt.slice(0, i)) + "<mark>" + esc(txt.slice(i, i + q.length)) + "</mark>" + esc(txt.slice(i + q.length));
+        } else span.textContent = txt;
+        if (hit) hits++;
+      });
+      el.style.display = hits ? "" : "none";
+      el.classList.toggle("open", !!q && hits > 0);
+      total += hits;
+    });
+    catsEl.classList.toggle("empty", total === 0);
+    refresh();
+  });
+
+  // ---- Helpers de UI ----
+  function show(id) {
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    $(id).classList.add("active");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function toast(msg) {
+    const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2600);
+  }
+  function fakeSend(btn, label, ms = 1300) {
+    btn.disabled = true; btn.classList.add("loading");
+    const txt = btn.querySelector(".txt"), prev = txt.textContent;
+    txt.textContent = label;
+    return new Promise(r => setTimeout(() => {
+      btn.disabled = false; btn.classList.remove("loading"); txt.textContent = prev; r();
+    }, ms));
+  }
+  document.querySelectorAll("input, textarea").forEach(i =>
+    i.addEventListener("input", () => i.classList.remove("invalid")));
+  $("#otro").addEventListener("input", () => catsEl.classList.remove("invalid-box"));
+
+  function row(k, v) {
+    const d = document.createElement("div");
+    d.innerHTML = "<span></span><span></span>";
+    d.children[0].textContent = k; d.children[1].textContent = v;
+    return d.outerHTML;
+  }
+
+  // ---- Paso 1 ----
+  $("#f-quick").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    let ok = true, first = null;
+    ["#razon", "#cuit", "#contacto", "#email", "#tel"].forEach(s => {
+      const el = $(s);
+      let bad = !el.value.trim();
+      if (s === "#email") bad = bad || !/^\S+@\S+\.\S+$/.test(el.value);
+      el.classList.toggle("invalid", bad);
+      if (bad) { ok = false; first = first || el; }
+    });
+    const otro = $("#otro").value.trim();
+    if (!selected.size && !otro) { ok = false; catsEl.classList.add("invalid-box"); first = first || $("#rfilter"); }
+    if (!ok) { first.focus(); toast(first === $("#rfilter") ? "Elegí al menos un rubro" : "Revisá los campos marcados"); return; }
+
+    await fakeSend($("#b-quick"), "Enviando…");
+
+    $("#ok-name").textContent = $("#contacto").value.trim().split(" ")[0];
+    $("#ok-mail").textContent = $("#email").value.trim();
+    $("#more-title").textContent = "Contanos más sobre " + $("#razon").value.trim();
+    const emp = document.querySelector("input[name=empresa]:checked").value;
+    const rub = [...selected];
+    if (otro) rub.push(otro);
+    $("#ok-summary").innerHTML =
+      row("Empresa", $("#razon").value.trim()) +
+      row("CUIT / ID fiscal", $("#cuit").value.trim()) +
+      row("Interés", emp) +
+      row("Rubros", rub.length > 2 ? rub.slice(0, 2).join(", ") + " +" + (rub.length - 2) : rub.join(", "));
+    show("#v-ok");
+  });
+
+  // ---- Confirmación ----
+  $("#b-more").addEventListener("click", () => { $("#bar2").classList.add("on"); show("#v-more"); });
+  $("#b-done").addEventListener("click", () => show("#v-end"));
+
+  // ---- Paso 2 ----
+  $("#f-more").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await fakeSend($("#b-send-more"), "Guardando…");
+    show("#v-end");
+  });
+  $("#b-skip").addEventListener("click", () => show("#v-end"));
+
+  // ---- Reiniciar (útil en el stand con una tablet) ----
+  $("#b-restart").addEventListener("click", () => {
+    $("#f-quick").reset(); $("#f-more").reset();
+    selected.clear();
+    $("#rfilter").dispatchEvent(new Event("input"));
+    catsEl.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+    catsEl.querySelectorAll(".cat").forEach(c => c.classList.remove("open"));
+    refresh();
+    $("#bar2").classList.remove("on");
+    show("#v-quick");
+  });
+
+  // =====================================================================
+  //  CORREO (el mismo va al proveedor y a Compras de BAESA y BAGSA).
+  //  Armado con tablas y estilos en línea para que se vea bien en
+  //  Outlook / Gmail. En Laravel esto pasa a ser una vista Blade del Mailable.
+  // =====================================================================
+  const val = (s) => ($(s) && $(s).value || "").trim();
+
+  function getData() {
+    const rubrosPorCat = CATEGORIAS
+      .map(c => ({ cat: c.nombre, items: c.items.filter(i => selected.has(i)) }))
+      .filter(g => g.items.length);
+    if (val("#otro")) rubrosPorCat.push({ cat: "Otro", items: [val("#otro")] });
+    return {
+      razon: val("#razon"), cuit: val("#cuit"), contacto: val("#contacto"),
+      email: val("#email"), tel: val("#tel"),
+      empresa: document.querySelector("input[name=empresa]:checked").value,
+      rubrosPorCat, totalRubros: selected.size + (val("#otro") ? 1 : 0),
+      perfil: {
+        "Domicilio": [val("#dir"), val("#loc"), val("#prov")].filter(Boolean).join(", "),
+        "Condición IVA": val("#iva"),
+        "Tamaño": val("#tam"),
+        "Empleados": val("#emp"),
+        "Sitio web": val("#web"),
+        "Principales clientes": val("#clientes"),
+        "Productos y servicios": val("#desc"),
+      },
+      antecedentes: [
+        ["Registro de Proveedores PBA", $("#a-reg").checked],
+        ["Experiencia en sector energético", $("#a-sector").checked],
+        ["Certificaciones ISO", $("#a-iso").checked],
+      ],
+      perfilCompleto: $("#bar2").classList.contains("on"),
+      fecha: new Date().toLocaleString("es-AR", { dateStyle: "long", timeStyle: "short" }),
+    };
+  }
+
+  function buildEmail(d) {
+    const F = "font-family:Segoe UI,Helvetica,Arial,sans-serif;";
+    const e = (s) => esc(String(s || ""));
+    const h3 = (t) => `<tr><td style="${F}padding:26px 32px 8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0b6fa0;">${t}</td></tr>`;
+    const kv = (rows) => `<tr><td style="padding:0 32px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${
+      rows.map(([k, v]) => `<tr>
+        <td style="${F}padding:8px 12px 8px 0;border-bottom:1px solid #e6ebf2;font-size:13px;color:#5b6b80;width:38%;vertical-align:top;">${e(k)}</td>
+        <td style="${F}padding:8px 0;border-bottom:1px solid #e6ebf2;font-size:14px;color:#0f1b2d;font-weight:600;vertical-align:top;word-break:break-word;">${v}</td>
+      </tr>`).join("")}</table></td></tr>`;
+    const pill = (t) => `<span style="display:inline-block;margin:0 6px 6px 0;padding:5px 10px;border-radius:999px;background:#eef4fa;border:1px solid #d7e3ef;font-size:13px;color:#0f1b2d;">${e(t)}</span>`;
+    const empresaTxt = d.empresa === "Ambas" ? "BAESA y BAGSA" : d.empresa;
+
+    const perfilRows = Object.entries(d.perfil).filter(([, v]) => v).map(([k, v]) => [k, e(v).replace(/\n/g, "<br>")]);
+    const ant = d.antecedentes.map(([k, v]) => [k, v ? '<span style="color:#12a26b;">✔ Sí</span>' : '<span style="color:#8a97a8;font-weight:500;">No</span>']);
+    const hayPerfil = d.perfilCompleto && (perfilRows.length || d.antecedentes.some(a => a[1]));
+
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#eef2f7;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;">
+
+  <!-- Encabezado -->
+  <tr><td align="center" style="background:#0b1f3a;padding:28px 24px 24px;">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+      <td style="padding:0 16px;"><img src="logo_50b.png" alt="BAESA" height="40" style="display:block;height:40px;border:0;"></td>
+      <td style="width:1px;background:#4a5d78;"></td>
+      <td style="padding:0 16px;"><img src="Logo-BAGSA-blanco-300x149-1.png" alt="BAGSA" height="40" style="display:block;height:40px;border:0;"></td>
+    </tr></table>
+    <div style="${F}margin-top:16px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4fd1c5;">2° Ronda de Negocios de Energía y Minería</div>
+  </td></tr>
+  <tr><td style="height:4px;background:#1ea7e1;background-image:linear-gradient(90deg,#1ea7e1,#4fd1c5);font-size:0;line-height:0;">&nbsp;</td></tr>
+
+  <!-- Intro -->
+  <tr><td style="${F}padding:30px 32px 0;">
+    <div style="font-size:22px;font-weight:800;color:#0f1b2d;line-height:1.25;">Registro de proveedor recibido</div>
+    <p style="margin:10px 0 0;font-size:14.5px;line-height:1.55;color:#3d4b5e;">
+      <strong>${e(d.razon)}</strong> se registró como proveedor de <strong>${e(empresaTxt)}</strong>
+      durante la 2° Ronda de Negocios de Energía y Minería. Este correo es la constancia del registro
+      y se envía al proveedor y a las áreas de Compras de BAESA y BAGSA.
+    </p>
+  </td></tr>
+
+  ${h3("Empresa y contacto")}
+  ${kv([
+    ["Razón social", e(d.razon)],
+    ["CUIT / ID fiscal", e(d.cuit)],
+    ["Contacto", e(d.contacto)],
+    ["Email", `<a href="mailto:${e(d.email)}" style="color:#0b6fa0;text-decoration:none;">${e(d.email)}</a>`],
+    ["Teléfono / WhatsApp", e(d.tel)],
+    ["Interés en proveer a", e(empresaTxt)],
+  ])}
+
+  ${h3(`Rubros (${d.totalRubros})`)}
+  <tr><td style="${F}padding:0 32px;">
+    ${d.rubrosPorCat.map(g => `
+      <div style="font-size:13px;font-weight:700;color:#0f1b2d;margin:10px 0 8px;">${e(g.cat)}</div>
+      <div>${g.items.map(pill).join("")}</div>`).join("")}
+  </td></tr>
+
+  ${hayPerfil ? (perfilRows.length ? h3("Perfil de la empresa") + kv(perfilRows) : "") + h3("Antecedentes") + kv(ant) : ""}
+
+  <!-- Cierre -->
+  <tr><td style="${F}padding:28px 32px 30px;">
+    <p style="margin:0;font-size:14px;line-height:1.55;color:#3d4b5e;">
+      El equipo de Compras se va a comunicar cuando surja una oportunidad en los rubros indicados.
+      Si algún dato es incorrecto, respondé este correo indicando la corrección.
+    </p>
+    <p style="margin:16px 0 0;font-size:14px;color:#0f1b2d;font-weight:600;">Compras · BAESA y BAGSA</p>
+  </td></tr>
+
+  <!-- Pie -->
+  <tr><td style="${F}background:#f5f8fb;border-top:1px solid #e6ebf2;padding:16px 32px;font-size:11.5px;line-height:1.5;color:#8a97a8;">
+    Registro realizado el ${e(d.fecha)} · Buenos Aires Energía S.A. · Buenos Aires Gas S.A.<br>
+    Este es un mensaje automático.
+  </td></tr>
+
+</table>
+</td></tr></table>
+</body></html>`;
+  }
+
+  function openMail() {
+    const d = getData();
+    $("#m-to").textContent = `${d.contacto} <${d.email}>`;
+    $("#m-subj").textContent = `Registro de proveedor · ${d.razon} · 2° Ronda de Negocios de Energía y Minería`;
+    const fr = $("#mail-frame");
+    fr.onload = () => { fr.style.height = fr.contentDocument.documentElement.scrollHeight + "px"; };
+    fr.srcdoc = buildEmail(d);
+    $("#mail-modal").classList.add("open");
+    $("#mail-modal").scrollTop = 0;
+    document.body.style.overflow = "hidden";
+  }
+  function closeMail() { $("#mail-modal").classList.remove("open"); document.body.style.overflow = ""; }
+  document.querySelectorAll("[data-mail]").forEach(b => b.addEventListener("click", openMail));
+  $("#mail-close").addEventListener("click", closeMail);
+  $("#mail-modal").addEventListener("click", (e) => { if (e.target.id === "mail-modal") closeMail(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMail(); });
+</script>
+</body>
+</html>

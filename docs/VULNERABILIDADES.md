@@ -321,6 +321,16 @@ app se comprometa (ver V1).
 **Recomendación:** si la API interna llega a exponerse, o como endurecimiento, exigir un secreto de
 servicio en `generate-token` además del CUIT y el email.
 
+### V18 — `/formularioprovincia` sin rate limit ni anti-bot (aceptado, temporal)
+
+El formulario de la 2° Ronda de Negocios escribe filas en la base local sin `throttle`, honeypot ni
+Turnstile. Fue una decisión explícita del dueño del proyecto (2026-11-25): el formulario dura un
+día. El peor caso es llenar `registros_formulario_provincia` de basura. El tamaño de cada campo está
+acotado por validación y no se manda ningún correo.
+
+**Recomendación:** poner `FORMULARIO_PROVINCIA_ACTIVO=false` apenas termine el evento, y marcar
+este hallazgo como resuelto.
+
 ---
 
 ## Resueltos

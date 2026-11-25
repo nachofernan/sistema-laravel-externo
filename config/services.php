@@ -33,6 +33,11 @@ return [
         'secret_key' => env('TURNSTILE_SECRET_KEY'),
     ],
 
+    // Formulario de un día de la 2° Ronda de Negocios (ver docs/DECISIONES.md, 2026-11-25).
+    'formulario_provincia' => [
+        'activo' => (bool) env('FORMULARIO_PROVINCIA_ACTIVO', false),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

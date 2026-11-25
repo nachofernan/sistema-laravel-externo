@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\ProviderRegistrationController;
 use App\Http\Controllers\ConcursoController;
 use App\Http\Controllers\DataRequestController;
 use App\Http\Controllers\FileController;
+use App\Http\Controllers\FormularioProvinciaController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\SolicitudRegistroController;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +32,15 @@ if (app()->environment('production')) {
 // Ruta principal
 Route::get('/', function () {
     return redirect()->route('login');
+});
+
+// === FORMULARIO DE UN DÍA: 2° Ronda de Negocios (QR del stand) ===
+// Fuera de 'guest' para que un usuario logueado que escanea el QR no termine redirigido.
+Route::controller(FormularioProvinciaController::class)->prefix('formularioprovincia')->group(function () {
+    Route::get('/', 'show')->name('formularioprovincia');
+    Route::post('/', 'store')->name('formularioprovincia.store');
+    Route::post('/perfil', 'update')->name('formularioprovincia.perfil');
+    Route::post('/reiniciar', 'reiniciar')->name('formularioprovincia.reiniciar');
 });
 
 Route::post('/proveedor/subir-documento', [FileController::class, 'uploadDocumentoGeneral'])
